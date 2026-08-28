@@ -1,0 +1,26 @@
+Third-Party Licenses
+
+PDFDarkView is distributed under the MIT License.
+
+This software uses third-party open-source libraries that remain subject to their respective licenses.
+
+Included libraries may include:
+
+* PyQt5 (GPL/LGPL/commercial licensing by Qt)
+* PyMuPDF (AGPL or commercial licensing by Artifex)
+* Tesseract OCR (Apache License 2.0)
+* pytesseract (Apache License 2.0)
+* OCRmyPDF (MPL 2.0)
+* Pillow (HPND License)
+* PyPDF2 (BSD License)
+* pdf2image (MIT License)
+* NumPy (BSD License)
+* OpenCV (Apache License 2.0)
+* cryptography (Apache License 2.0 / BSD License)
+* QtAwesome (MIT License)
+* python-docx (MIT License)
+* pyttsx3 (MPL 2.0)
+
+Users are responsible for complying with the license terms of any third-party software distributed with or used by PDFDarkView.
+
+Copyrights and trademarks remain the property of their respective owners.
