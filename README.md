@@ -261,26 +261,31 @@ So lässt sich die Anwendung dennoch öffnen:
 6. Bestätige den Dialog mit **Öffnen**.
 
 ---
-# Screenshots
 
 <details>
 <summary>📸 Screenshots anzeigen</summary>
 
-### Hauptfenster
+### PDF Bearbeiten / Einfügen (Dark Mode / Light Mode)
+
+![](docs/screenshots/ScreenShot11.png)
+
+![](docs/screenshots/ScreenShot11.png)
+
+### Über PDFDarkView
 
 ![](docs/screenshots/ScreenShot1.png)
 
-### PDF bearbeiten
+### OCR Einstellungen
 
-![](docs/screenshots/ScreenShot2.png)
+![](docs/screenshots/ScreenShot9.png)
 
-### OCR
+### OCR Textfenster
 
 ![](docs/screenshots/ScreenShot3.png)
 
-### Dark Mode
+### Passwortverwaltung
 
-![](docs/screenshots/04_darkmode.png)
+![](docs/screenshots/ScreenShot8.png)
 
 </details>
 
