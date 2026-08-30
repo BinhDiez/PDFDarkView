@@ -261,6 +261,30 @@ So lässt sich die Anwendung dennoch öffnen:
 6. Bestätige den Dialog mit **Öffnen**.
 
 ---
+# Screenshots
+
+<details>
+<summary>📸 Screenshots anzeigen</summary>
+
+### Hauptfenster
+
+![](docs/screenshots/ScreenShot1.png)
+
+### PDF bearbeiten
+
+![](docs/screenshots/ScreenShot2.png)
+
+### OCR
+
+![](docs/screenshots/ScreenShot3.png)
+
+### Dark Mode
+
+![](docs/screenshots/04_darkmode.png)
+
+</details>
+
+---
 
 # Suchbegriffe
 
