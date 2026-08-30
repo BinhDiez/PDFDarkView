@@ -1,4 +1,4 @@
-# PDFDarkView
+## PDFDarkView - PDF Bearbeitung leicht gemacht (kostenlos)
 
 <p align="center">
   <img src="https://github.com/user-attachments/assets/bc440bc9-2def-404b-ad51-142cae26dc19" alt="PDFDarkView Logo" width="260">
@@ -252,11 +252,6 @@ Beim ersten Start kann macOS Gatekeeper die Ausführung blockieren.
 
 So lässt sich die Anwendung dennoch öffnen:
 
-1. PDFDarkView im Finder auswählen.
-2. Rechtsklick (oder Ctrl-Klick).
-3. **Öffnen** wählen.
-4. Den Dialog erneut mit **Öffnen** bestätigen.
-
 1. Versuche, PDFDarkView.app einmal zu öffnen.
 2. Die Warnung erscheint – klicke auf **Fertig** oder **Abbrechen**. (Nicht in den Papierkorb legen)
 3. Öffne **Systemeinstellungen** → **Datenschutz & Sicherheit**.
@@ -264,6 +259,7 @@ So lässt sich die Anwendung dennoch öffnen:
    Dort sollte eine Meldung erscheinen wie:
    **„PDFDarkView.app wurde blockiert …“**
 6. Bestätige den Dialog mit **Öffnen**.
+
 ---
 
 # Suchbegriffe
