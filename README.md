@@ -269,7 +269,7 @@ So lässt sich die Anwendung dennoch öffnen:
 
 ![](docs/screenshots/ScreenShot11.png)
 
-![](docs/screenshots/ScreenShot11.png)
+![](docs/screenshots/ScreenShot12.png)
 
 ### Über PDFDarkView
 
