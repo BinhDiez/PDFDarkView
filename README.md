@@ -1,4 +1,4 @@
-PDFDarkView 2.4.3
+## PDFDarkView
 
 <img width="382" height="375" alt="PDFDarkView" src="https://github.com/user-attachments/assets/bc440bc9-2def-404b-ad51-142cae26dc19" />
 
