@@ -3,13 +3,13 @@
 <img width="382" height="375" alt="PDFDarkView" src="https://github.com/user-attachments/assets/bc440bc9-2def-404b-ad51-142cae26dc19" />
 
 
-PDF viewer and editor with OCR, accessibility features, multilingual support, and advanced PDF processing tools.
+# PDF viewer and editor with OCR, accessibility features, multilingual support, and advanced PDF processing tools.
 
 PDFDarkView combines PDF viewing, editing, OCR recognition, document conversion, accessibility tools, and PDF optimization in a single application. It is designed for both everyday PDF workflows and users with visual impairments.
 
 ⸻
 
-Features
+# Features
 
 Core Features
 
