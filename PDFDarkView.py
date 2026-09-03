@@ -38,45 +38,50 @@ cd "/Users/imactoralf/Documents/privat/AppleScript Projekte/PDFTools_by_BinhDiez
 # 3. Skript starten
 python PDFDarkView.py
 """
-
-import sys
-import os
-import platform
-import numpy as np
-import pytesseract
-import fitz  # PyMuPDF
-import docx
-import re
-import io
-import tempfile
-import shutil
-import subprocess
-import inspect
-import traceback
-import weakref
-import pyttsx3
+# Standartbibliothek
 import argparse
-import ocrmypdf
-import hashlib
-from multiprocessing import Process
-import threading
-import cv2
-import json
-import math
-import time
 import atexit
 import base64
-import qtawesome as qta
-import unicodedata
+import hashlib
 import importlib.util
-from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import inspect
+import io
+import json
+import math
+import os
+import platform
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+import time
+import traceback
+import unicodedata
+import weakref
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
-from PIL import Image, ImageEnhance, ImageDraw, ImageFont
-from pdf2image import convert_from_path  # Für bild-basierte OCR
+from multiprocessing import Process
+
+# Drittanbietermodule
+import fitz  # PyMuPDF
+import pyttsx3
+import qtawesome as qta
+from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from PyPDF2 import PdfReader, PdfWriter
+
+### Lazy Importe werden nur bei Bedarf in den Methoden importiert
+# import cv2  # Lazy
+# import numpy as np # Lazy
+# import docx # Lazy
+# import pytesseract # Lazy
+# import ocrmypdf # Lazy
+# from cryptography.fernet import Fernet # Lazy
+# from cryptography.hazmat.primitives import hashes # Lazy
+# from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC # Lazy
+# from pdf2image import convert_from_path  # Für bild-basierte OCR # Lazy
+
 from PyQt5 import QtCore, sip
 from PyQt5.QtCore import QDateTime, QDate, QTime, QUrl
 from PyQt5.QtCore import (
@@ -201,11 +206,14 @@ from PyQt5.QtGui import (
 ### AKTUELLE PROGRAMM-VERSION
 ### = GitHub‑Release‑Tag (ohne führendes 'v')
 ### ====================================================
-APP_VERSION = "2.4.4"
+APP_VERSION = "2.4.5"
 
 # ACHTUNG: nur als PW geschütztes ZIP auf GitHub hochladen
 
 """ Changelog:
+        2.4.5 --> Lazy Importe
+        --> Spracherkennung und Auswahl umstrukturiert
+        --> BugFix OCR Test Timeout in langsamere Systemumgebungen
         2.4.4 --> BugFix und weitere Zeitmessungen
          --> Suffixe mit optionalem Benutzernamem
         2.4.3 --> Drucken unter Windows nutzt App aus Liste
@@ -441,6 +449,7 @@ if platform.system() == "Darwin":
     os.environ["QT_MAC_WARN_ABOUT_GDIFONT_WARNINGS"] = "0"
 elif platform.system() == "Windows":
     os.environ["QT_QPA_PLATFORM"] = "windows"
+    import pytesseract # Lazy (ist oben im Code auskommentiert)
     # Pfade für Windows anpassen
     pytesseract.pytesseract.tesseract_cmd = (
         r"C:\Program Files\Tesseract-OCR\tesseract.exe"
@@ -1343,42 +1352,49 @@ class Config:
 
     @classmethod
     def check_ocr_installation(cls):
-        start_time = time.time()
-        # print("\n" + "=" * 60)
-        print("\n=== OCR-INSTALLATION TEST ===")
-        # print("=" * 60)
+
+        print("\n" + "=" * 60)
+        print("OCR-INSTALLATION TEST")
+        print("=" * 60)
 
         tesseract_ok = False
         ocrmypdf_ok = False
 
-        # 1. Tesseract prüfen
-        if cls.TESSERACT_PATH and os.path.exists(cls.TESSERACT_PATH):
-            print(f"Tesseract gefunden: {cls.TESSERACT_PATH}")
-            try:
-                result = subprocess.run([cls.TESSERACT_PATH, "--version"], capture_output=True, text=True, timeout=2)
-                if result.returncode == 0:
-                    tesseract_ok = True
-                    print(f"  Version: {result.stdout.strip().split('\n')[0]}")
-                else:
-                    print(f"  ❌ Tesseract existiert, aber --version fehlgeschlagen (exit {result.returncode})")
-            except subprocess.TimeoutExpired:
-                print("  ❌ Tesseract --version Timeout (2s)")
-            except Exception as e:
-                print(f"  ❌ Tesseract --version Fehler: {e}")
-        else:
-            print("❌ Tesseract nicht gefunden (Pfad fehlt oder Datei existiert nicht)")
-
-        # 2. ocrmypdf prüfen
         if getattr(sys, "frozen", False):
-            # Bundle-Modus: Python-Modul reicht
+            # ===== BUNDLE-MODUS: Keine subprocess-Aufrufe! =====
+            print("Bundle-Modus: Prüfe OCR-Tools ohne subprocess...")
+            if cls.TESSERACT_PATH and os.path.exists(cls.TESSERACT_PATH):
+                tesseract_ok = True
+                print(f"  Tesseract: ✅ vorhanden ({cls.TESSERACT_PATH})")
+            else:
+                print("  Tesseract: ❌ nicht gefunden")
+
             try:
                 import ocrmypdf
                 ocrmypdf_ok = True
-                print("OCRmyPDF: ✅ OK (Python-Modul im Bundle)")
+                print("  OCRmyPDF: ✅ OK (Python-Modul im Bundle)")
             except ImportError:
-                print("OCRmyPDF: ❌ Fehlt (Import fehlgeschlagen)")
+                print("  OCRmyPDF: ❌ Fehlt (Import fehlgeschlagen)")
+
+            print(f"Poppler: ✅ OK (Bundle: {cls.POPPLER_PATH})")
         else:
-            # Entwicklungsmodus: externer Befehl
+            # ===== ENTWICKLUNGSMODUS: subprocess mit Timeout =====
+            if cls.TESSERACT_PATH and os.path.exists(cls.TESSERACT_PATH):
+                print(f"Tesseract gefunden: {cls.TESSERACT_PATH}")
+                try:
+                    result = subprocess.run([cls.TESSERACT_PATH, "--version"], capture_output=True, text=True, timeout=2)
+                    if result.returncode == 0:
+                        tesseract_ok = True
+                        print(f"  Version: {result.stdout.strip().split('\n')[0]}")
+                    else:
+                        print(f"  ❌ Tesseract --version fehlgeschlagen (exit {result.returncode})")
+                except subprocess.TimeoutExpired:
+                    print("  ❌ Tesseract --version Timeout (2s)")
+                except Exception as e:
+                    print(f"  ❌ Tesseract --version Fehler: {e}")
+            else:
+                print("❌ Tesseract nicht gefunden (Pfad fehlt)")
+
             if cls.OCRMYPDF_PATH and os.path.exists(cls.OCRMYPDF_PATH):
                 print(f"OCRmyPDF gefunden: {cls.OCRMYPDF_PATH}")
                 try:
@@ -1395,11 +1411,7 @@ class Config:
             else:
                 print("❌ OCRmyPDF nicht gefunden (Pfad fehlt)")
 
-        # 3. Poppler (nur Info)
-        if getattr(sys, "frozen", False):
-            print(f"Poppler: ✅ OK (Bundle: {cls.POPPLER_PATH})")
-            poppler_ok = True
-        else:
+            # Poppler (Info)
             poppler_ok = False
             for path in cls.POPPLER_PATHS:
                 pdfinfo_path = os.path.join(path, "pdfinfo")
@@ -1410,9 +1422,6 @@ class Config:
             if not poppler_ok:
                 print(f"Poppler: ⚠️  Nicht im Standard-PATH")
 
-        print("=== END OCR-TEST ===")
-        elapsed = time.time() - start_time
-        # print(f"[TIMING] check_ocr_installation completed in {elapsed:.3f}s") # wird bereits in main ausgegeben
         return tesseract_ok and ocrmypdf_ok
 
     @staticmethod
@@ -2142,17 +2151,19 @@ class FilenameSettingsDialog(QDialog):
         # --- Bildschirmgröße für maximale Dialogmaße ermitteln ---
         screen = QApplication.primaryScreen()
         screen_geometry = screen.availableGeometry()
-        max_dialog_height = int(
-            screen_geometry.height() * 0.8
-        )  # 80% der verfügbaren Höhe
-        max_dialog_width = int(
-            screen_geometry.width() * 0.9
-        )  # 90% der verfügbaren Breite
+
+        # Nur 90% der Höhe und 85% der Breite
+        max_dialog_height = int(screen_geometry.height() * 0.9)
+        max_dialog_width = int(screen_geometry.width() * 0.85)
+
+        # Mindestgröße reduzieren für kleine Bildschirme
+        min_height = min(750, max_dialog_height - 50)
+        min_width = min(950, max_dialog_width - 50)
 
         self.setWindowTitle(parent.tr("filename_settings_title"))
 
-        self.setMinimumWidth(950)
-        self.setMinimumHeight(750)
+        self.setMinimumWidth(min_width)
+        self.setMinimumHeight(min_height)
         self.setModal(True)
         self.setMaximumSize(max_dialog_width, max_dialog_height)
         self.setSizeGripEnabled(True)
@@ -2162,6 +2173,387 @@ class FilenameSettingsDialog(QDialog):
         self.load_settings()
         self.init_ui()
         self.update_preview()
+
+        # Nach dem Aufbau den Dialog auf die richtige Größe bringen
+        self.adjustSize()
+        # Sicherstellen, dass der Dialog nicht größer als der Bildschirm ist
+        if self.height() > max_dialog_height:
+            self.resize(self.width(), max_dialog_height)
+        if self.width() > max_dialog_width:
+            self.resize(max_dialog_width, self.height())
+
+    def init_ui(self):
+        """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
+        # Hauptlayout (vertikal)
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)  # Kleinere Ränder
+        main_layout.setSpacing(8)  # Weniger Abstand
+
+        # ========== 1. Kopfbereich (Header) – KEINE SCROLLAREA ==========
+        header = QWidget()
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(0, 0, 0, 15)
+        header_layout.setSpacing(10)
+
+        header_layout.addStretch(1)
+
+        if os.path.exists(Config.IMAGE_PATH):
+            self.logo_label = QLabel()
+            logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
+                80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self.logo_label.setPixmap(logo_pixmap)
+            self.logo_label.setAlignment(Qt.AlignVCenter)
+            header_layout.addWidget(self.logo_label)
+            header_layout.addStretch(1)
+
+        self.title_label = QLabel(self.parent.tr("filename_settings_dialog_title"))
+        self.title_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 20px;
+                font-weight: bold;
+                padding: 5px;
+            }
+        """)
+        self.title_label.setAlignment(Qt.AlignCenter)
+        header_layout.addWidget(self.title_label)
+        header_layout.addStretch(1)
+
+        if os.path.exists(Config.APP_ICON_PATH):
+            self.icon_label = QLabel()
+            icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
+                50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            )
+            self.icon_label.setPixmap(icon_pixmap)
+            self.icon_label.setAlignment(Qt.AlignVCenter)
+            header_layout.addWidget(self.icon_label)
+
+        header_layout.addStretch(1)
+        main_layout.addWidget(header)
+
+
+        # ========== 2. ScrollArea für den gesamten interaktiven Inhalt ==========
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll_area.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background: #3D3D3D;
+                width: 14px;
+                margin: 0px;
+            }
+            QScrollBar::handle:vertical {
+                background: #AAAAAA;
+                min-height: 20px;
+                border-radius: 7px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background: #CCCCCC;
+            }
+            QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
+                height: 0px;
+            }
+        """)
+
+        # Container für den Inhalt der ScrollArea
+        content_widget = QWidget()
+        content_widget.setStyleSheet("background-color: #1E1E1E;")
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(8, 8, 8, 8)
+        content_layout.setSpacing(12)
+
+        # ================= Zwei horizontale Bereiche (Optionen) =================
+        options_widget = QWidget()
+        options_layout = QHBoxLayout(options_widget)
+        options_layout.setSpacing(15)
+
+        # Linke Spalte: Formatierungsoptionen (Zeitstempel + Benutzername)
+        left_widget = QWidget()
+        left_layout = QVBoxLayout(left_widget)
+        left_layout.setSpacing(10)
+
+        # Zeitstempel Gruppe - kompakter
+        self.ts_group = QGroupBox(self.parent.tr("filename_use_timestamp"))
+        self.ts_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+        ts_layout = QFormLayout()
+        ts_layout.setSpacing(5)
+        ts_layout.setContentsMargins(8, 8, 8, 8)
+
+        self.use_ts_cb = QCheckBox(self.parent.tr("filename_use_timestamp"))
+        self.use_ts_cb.setChecked(self.use_timestamp)
+        self.use_ts_cb.toggled.connect(self.update_preview)
+        ts_layout.addRow(self.use_ts_cb)
+
+        self.ts_format_combo = QComboBox()
+        now = datetime.now()
+        formats = [
+            ("%Y%m%d_%H%M%S", now.strftime("%Y%m%d_%H%M%S")),
+            ("%Y-%m-%d_%H%M%S", now.strftime("%Y-%m-%d_%H%M%S")),
+            ("%Y%m%d_%H%M", now.strftime("%Y%m%d_%H%M")),
+            ("%Y-%m-%d_%H%M", now.strftime("%Y-%m-%d_%H%M")),
+            ("%Y%m%d", now.strftime("%Y%m%d")),
+            ("%Y-%m-%d", now.strftime("%Y-%m-%d")),
+            ("%d.%m.%Y_%H%M%S", now.strftime("%d.%m.%Y_%H%M%S")),
+            ("%d.%m.%Y_%H%M", now.strftime("%d.%m.%Y_%H%M")),
+        ]
+        for fmt, example in formats:
+            self.ts_format_combo.addItem(example, fmt)
+        idx = self.ts_format_combo.findData(self.timestamp_format)
+        if idx >= 0:
+            self.ts_format_combo.setCurrentIndex(idx)
+        self.ts_format_combo.currentIndexChanged.connect(self.update_preview)
+        ts_layout.addRow(
+            self.parent.tr("filename_timestamp_format") + ":", self.ts_format_combo
+        )
+
+        self.ts_pos_combo = QComboBox()
+        self.ts_pos_combo.addItem(
+            self.parent.tr("filename_timestamp_position_before"), "before"
+        )
+        self.ts_pos_combo.addItem(
+            self.parent.tr("filename_timestamp_position_after"), "after"
+        )
+        self.ts_pos_combo.addItem(
+            self.parent.tr("filename_timestamp_position_end"), "end"
+        )
+        idx = self.ts_pos_combo.findData(self.timestamp_position)
+        if idx >= 0:
+            self.ts_pos_combo.setCurrentIndex(idx)
+        self.ts_pos_combo.currentIndexChanged.connect(self.update_preview)
+        ts_layout.addRow(
+            self.parent.tr("filename_timestamp_position") + ":", self.ts_pos_combo
+        )
+
+        self.ts_group.setLayout(ts_layout)
+        left_layout.addWidget(self.ts_group)
+
+        # Benutzername Gruppe - kompakter
+        username_group = QGroupBox(self.parent.tr("username_in_suffix"))
+        username_group.setStyleSheet("""
+            QGroupBox {
+                border: 1px solid #555;
+                border-radius: 4px;
+                margin-top: 3px;
+                padding-top: 8px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        username_layout = QVBoxLayout()
+        username_layout.setSpacing(5)
+        username_layout.setContentsMargins(8, 8, 8, 8)
+
+        self.use_username_cb = QCheckBox(self.parent.tr("username_in_suffix_enable"))
+        self.use_username_cb.setChecked(self.use_username_in_suffix)
+        self.use_username_cb.toggled.connect(self.update_preview)
+        username_layout.addWidget(self.use_username_cb)
+
+        username_input_layout = QHBoxLayout()
+        username_input_layout.setSpacing(8)
+
+        username_label = QLabel(self.parent.tr("username_label"))
+        username_label.setStyleSheet("color: #FFFFFF; font-weight: bold;")
+        username_label.setMinimumWidth(80)
+
+        self.username_input = QLineEdit()
+        self.username_input.setText(self.username)
+        self.username_input.setPlaceholderText(self.parent.tr("username_placeholder"))
+        self.username_input.setStyleSheet("""
+            QLineEdit {
+                background-color: #2D2D2D;
+                border: 1px solid #666;
+                border-radius: 4px;
+                padding: 4px;
+                color: #FFFFFF;
+                font-size: 13px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #197602;
+            }
+            QLineEdit:disabled {
+                background-color: #3D3D3D;
+                color: #888888;
+            }
+        """)
+        self.username_input.textChanged.connect(self.update_preview)
+        self.username_input.setEnabled(self.use_username_in_suffix)
+        self.use_username_cb.toggled.connect(self.username_input.setEnabled)
+
+        reset_username_btn = QPushButton(self.parent.tr("username_reset"))
+        reset_username_btn.setFixedWidth(70)
+        reset_username_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2D2D2D;
+                border: 1px solid #666;
+                border-radius: 4px;
+                color: white;
+                font-size: 11px;
+                padding: 3px 6px;
+            }
+            QPushButton:hover {
+                background-color: #3D3D3D;
+                border-color: #777;
+            }
+        """)
+        reset_username_btn.clicked.connect(self._reset_username_to_system)
+
+        username_input_layout.addWidget(username_label)
+        username_input_layout.addWidget(self.username_input, 1)
+        username_input_layout.addWidget(reset_username_btn)
+        username_layout.addLayout(username_input_layout)
+
+        # Hinweistext - kleiner und kompakter
+        hint_label = QLabel(self.parent.tr("username_hint"))
+        hint_label.setWordWrap(True)
+        hint_label.setStyleSheet("color: #AAAAAA; font-size: 10px; font-style: italic; margin-left: 8px;")
+        hint_label.setMinimumHeight(25)
+        username_layout.addWidget(hint_label)
+
+        username_group.setLayout(username_layout)
+        left_layout.addWidget(username_group)
+
+        # Trennzeichen Gruppe - kompakter
+        self.sep_group = QGroupBox(self.parent.tr("filename_separator"))
+        self.sep_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+        sep_layout = QVBoxLayout()
+        sep_layout.setSpacing(5)
+        sep_layout.setContentsMargins(8, 8, 8, 8)
+
+        self.sep_underscore = QRadioButton(self.parent.tr("filename_separator_underscore"))
+        self.sep_space = QRadioButton(self.parent.tr("filename_separator_space"))
+        self.sep_none = QRadioButton(self.parent.tr("filename_separator_none"))
+
+        if self.separator == "_":
+            self.sep_underscore.setChecked(True)
+        elif self.separator == " ":
+            self.sep_space.setChecked(True)
+        else:
+            self.sep_none.setChecked(True)
+
+        self.sep_underscore.toggled.connect(self.update_preview)
+        self.sep_space.toggled.connect(self.update_preview)
+        self.sep_none.toggled.connect(self.update_preview)
+
+        sep_layout.addWidget(self.sep_underscore)
+        sep_layout.addWidget(self.sep_space)
+        sep_layout.addWidget(self.sep_none)
+        self.sep_group.setLayout(sep_layout)
+        left_layout.addWidget(self.sep_group)
+
+        left_layout.addStretch()
+        options_layout.addWidget(left_widget, 1)
+
+        # Rechte Spalte: Verhalten bei Änderungen + Backup
+        right_widget = QWidget()
+        right_layout = QVBoxLayout(right_widget)
+        right_layout.setSpacing(10)
+
+        # Verhalten bei Änderungen - kompakter
+        behavior_widget = QWidget()
+        behavior_layout = QVBoxLayout(behavior_widget)
+        behavior_layout.setContentsMargins(0, 0, 0, 0)
+        behavior_layout.setSpacing(5)
+
+        title_label = QLabel(self.parent.tr("behavior_section").replace("\n", "<br>"))
+        title_label.setTextFormat(Qt.RichText)
+        title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+        behavior_layout.addWidget(title_label)
+
+        content_frame = QFrame()
+        content_frame.setFrameShape(QFrame.StyledPanel)
+        content_frame.setStyleSheet("border: 1px solid #555; border-radius: 4px; padding: 6px;")
+        content_layout_frame = QVBoxLayout(content_frame)
+        content_layout_frame.setSpacing(5)
+
+        self.rb_new_file = QRadioButton(self.parent.tr("behavior_new_file"))
+        self.rb_overwrite = QRadioButton(self.parent.tr("behavior_overwrite"))
+
+        if self.behavior == "new_file":
+            self.rb_new_file.setChecked(True)
+        else:
+            self.rb_overwrite.setChecked(True)
+
+        self.rb_new_file.toggled.connect(self.on_behavior_changed)
+        self.rb_overwrite.toggled.connect(self.on_behavior_changed)
+        content_layout_frame.addWidget(self.rb_new_file)
+        content_layout_frame.addWidget(self.rb_overwrite)
+
+        info_label = QLabel(self.parent.tr("behavior_info"))
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("color: #AAAAAA; font-style: italic; font-size: 11px; margin-left: 20px;")
+        content_layout_frame.addWidget(info_label)
+
+        behavior_layout.addWidget(content_frame)
+        right_layout.addWidget(behavior_widget)
+
+        # Backup-Checkbox
+        self.backup_cb = QCheckBox(self.parent.tr("settings_backup"))
+        self.backup_cb.setChecked(self.create_backup)
+        self.backup_cb.setStyleSheet("font-size: 12px;")
+        right_layout.addWidget(self.backup_cb)
+
+        right_layout.addStretch()
+        options_layout.addWidget(right_widget, 1)
+
+        content_layout.addWidget(options_widget)
+
+        # Vorschau-Gruppe - kompakter
+        preview_group = QGroupBox(self.parent.tr("filename_preview_label"))
+        preview_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+        preview_layout = QVBoxLayout()
+        preview_layout.setContentsMargins(8, 8, 8, 8)
+
+        self.preview_label = QLabel()
+        self.preview_label.setFont(QFont("Monospace", 12))
+        self.preview_label.setStyleSheet("background-color: #3A3A4A; padding: 6px; border-radius: 4px;")
+        self.preview_label.setWordWrap(True)
+        self.preview_label.setMinimumHeight(30)
+        preview_layout.addWidget(self.preview_label)
+        preview_group.setLayout(preview_layout)
+        content_layout.addWidget(preview_group)
+
+        # Weniger Platz am Ende
+        content_layout.addStretch()
+
+        scroll_area.setWidget(content_widget)
+        main_layout.addWidget(scroll_area, 1)
+
+        # ========== 3. Fussbereich (Buttons) – IMMER SICHTBAR ==========
+        btn_widget = QWidget()
+        btn_widget.setMaximumHeight(60)  # Begrenzung der Button-Höhe
+        btn_layout = QHBoxLayout(btn_widget)
+        btn_layout.setContentsMargins(0, 8, 0, 8)
+        btn_layout.setSpacing(10)
+        btn_layout.addStretch()
+
+        ok_btn = QPushButton(self.parent.tr("btn_ok"))
+        self.parent.style_button(ok_btn, "primary", (100, 25))
+        ok_btn.clicked.connect(self.accept)
+
+        cancel_btn = QPushButton(self.parent.tr("btn_cancel"))
+        self.parent.style_button(cancel_btn, "danger", (100, 25))
+        cancel_btn.clicked.connect(self.reject)
+
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+
+        main_layout.addWidget(btn_widget)
+
+        # Focus für Tastatursteuerung
+        cancel_btn.setFocusPolicy(Qt.StrongFocus)
+        ok_btn.setFocusPolicy(Qt.StrongFocus)
+
+        # Initialer Aufruf
+        self.on_behavior_changed()
 
     def load_settings(self):
         """Lädt alle Einstellungen."""
@@ -2218,366 +2610,6 @@ class FilenameSettingsDialog(QDialog):
             return ""
         except:
             return ""
-
-    def init_ui(self):
-        """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
-        # Hauptlayout (vertikal)
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(10, 10, 10, 10)
-        main_layout.setSpacing(12)
-
-        # ========== 1. Kopfbereich (Header) – KEINE SCROLLAREA ==========
-        header = QWidget()
-        header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 15)
-        header_layout.setSpacing(10)
-
-        header_layout.addStretch(1)
-
-        if os.path.exists(Config.IMAGE_PATH):
-            self.logo_label = QLabel()
-            logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
-                80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.logo_label.setPixmap(logo_pixmap)
-            self.logo_label.setAlignment(Qt.AlignVCenter)
-            header_layout.addWidget(self.logo_label)
-            header_layout.addStretch(1)
-
-        self.title_label = QLabel(self.parent.tr("filename_settings_dialog_title"))
-        self.title_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                padding: 5px;
-            }
-        """)
-        self.title_label.setAlignment(Qt.AlignCenter)
-        header_layout.addWidget(self.title_label)
-        header_layout.addStretch(1)
-
-        if os.path.exists(Config.APP_ICON_PATH):
-            self.icon_label = QLabel()
-            icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
-                50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
-            self.icon_label.setPixmap(icon_pixmap)
-            self.icon_label.setAlignment(Qt.AlignVCenter)
-            header_layout.addWidget(self.icon_label)
-
-        header_layout.addStretch(1)
-        main_layout.addWidget(header)
-
-        # ========== 2. ScrollArea für den gesamten interaktiven Inhalt ==========
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background: #3D3D3D;
-                width: 16px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #AAAAAA;
-                min-height: 20px;
-                border-radius: 8px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #CCCCCC;
-            }
-            QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
-                height: 0px;
-            }
-        """)
-
-        # Container für den Inhalt der ScrollArea
-        content_widget = QWidget()
-        content_widget.setStyleSheet("background-color: #1E1E1E;")
-        content_layout = QVBoxLayout(content_widget)
-        content_layout.setContentsMargins(0, 0, 0, 0)
-        content_layout.setSpacing(20)
-
-        # ================= Zwei horizontale Bereiche (Optionen) =================
-        options_widget = QWidget()
-        options_layout = QHBoxLayout(options_widget)
-        options_layout.setSpacing(20)
-
-        # Linke Spalte: Formatierungsoptionen (Zeitstempel + Benutzername)
-        left_widget = QWidget()
-        left_layout = QVBoxLayout(left_widget)
-
-        # Zeitstempel Gruppe
-        self.ts_group = QGroupBox(self.parent.tr("filename_use_timestamp"))
-        ts_layout = QFormLayout()
-        self.use_ts_cb = QCheckBox(self.parent.tr("filename_use_timestamp"))
-        self.use_ts_cb.setChecked(self.use_timestamp)
-        self.use_ts_cb.toggled.connect(self.update_preview)
-        ts_layout.addRow(self.use_ts_cb)
-
-        self.ts_format_combo = QComboBox()
-        now = datetime.now()
-        formats = [
-            ("%Y%m%d_%H%M%S", now.strftime("%Y%m%d_%H%M%S")),
-            ("%Y-%m-%d_%H%M%S", now.strftime("%Y-%m-%d_%H%M%S")),
-            ("%Y%m%d_%H%M", now.strftime("%Y%m%d_%H%M")),
-            ("%Y-%m-%d_%H%M", now.strftime("%Y-%m-%d_%H%M")),
-            ("%Y%m%d", now.strftime("%Y%m%d")),
-            ("%Y-%m-%d", now.strftime("%Y-%m-%d")),
-            ("%d.%m.%Y_%H%M%S", now.strftime("%d.%m.%Y_%H%M%S")),
-            ("%d.%m.%Y_%H%M", now.strftime("%d.%m.%Y_%H%M")),
-        ]
-        for fmt, example in formats:
-            self.ts_format_combo.addItem(example, fmt)
-        idx = self.ts_format_combo.findData(self.timestamp_format)
-        if idx >= 0:
-            self.ts_format_combo.setCurrentIndex(idx)
-        self.ts_format_combo.currentIndexChanged.connect(self.update_preview)
-        ts_layout.addRow(
-            self.parent.tr("filename_timestamp_format") + ":", self.ts_format_combo
-        )
-
-        self.ts_pos_combo = QComboBox()
-        self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_before"), "before"
-        )
-        self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_after"), "after"
-        )
-        self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_end"), "end"
-        )
-        idx = self.ts_pos_combo.findData(self.timestamp_position)
-        if idx >= 0:
-            self.ts_pos_combo.setCurrentIndex(idx)
-        self.ts_pos_combo.currentIndexChanged.connect(self.update_preview)
-        ts_layout.addRow(
-            self.parent.tr("filename_timestamp_position") + ":", self.ts_pos_combo
-        )
-
-        self.ts_group.setLayout(ts_layout)
-        left_layout.addWidget(self.ts_group)
-
-        # NEU: Benutzername in Suffixen (unter Zeitstempel)
-        username_group = QGroupBox(self.parent.tr("username_in_suffix"))
-        username_group.setStyleSheet("""
-            QGroupBox {
-                border: 1px solid #555;
-                border-radius: 4px;
-                margin-top: 5px;
-                padding-top: 10px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
-        username_layout = QVBoxLayout()
-        username_layout.setSpacing(8)
-
-        # Checkbox für Benutzername aktivieren
-        self.use_username_cb = QCheckBox(self.parent.tr("username_in_suffix_enable"))
-        self.use_username_cb.setChecked(self.use_username_in_suffix)
-        self.use_username_cb.toggled.connect(self.update_preview)
-        username_layout.addWidget(self.use_username_cb)
-
-        # Benutzername Eingabe
-        username_input_layout = QHBoxLayout()
-        username_input_layout.setSpacing(10)
-
-        username_label = QLabel(self.parent.tr("username_label"))
-        username_label.setStyleSheet("color: #FFFFFF; font-weight: bold;")
-        username_label.setMinimumWidth(100)
-
-        self.username_input = QLineEdit()
-        self.username_input.setText(self.username)
-        self.username_input.setPlaceholderText(self.parent.tr("username_placeholder"))
-        self.username_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2D2D2D;
-                border: 1px solid #666;
-                border-radius: 4px;
-                padding: 6px;
-                color: #FFFFFF;
-                font-size: 14px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #197602;
-            }
-            QLineEdit:disabled {
-                background-color: #3D3D3D;
-                color: #888888;
-            }
-        """)
-        self.username_input.textChanged.connect(self.update_preview)
-        self.username_input.setEnabled(self.use_username_in_suffix)
-
-        # Toggle für Benutzername (aktiviert/deaktiviert das Eingabefeld)
-        self.use_username_cb.toggled.connect(self.username_input.setEnabled)
-
-        # NEU: Button zum Zurücksetzen auf den System-Benutzernamen
-        reset_username_btn = QPushButton(self.parent.tr("username_reset"))
-        reset_username_btn.setFixedWidth(80)
-        reset_username_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2D2D2D;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: white;
-                font-size: 12px;
-                padding: 4px 8px;
-            }
-            QPushButton:hover {
-                background-color: #3D3D3D;
-                border-color: #777;
-            }
-        """)
-        reset_username_btn.clicked.connect(self._reset_username_to_system)
-
-        username_input_layout.addWidget(username_label)
-        username_input_layout.addWidget(self.username_input, 1)
-        username_input_layout.addWidget(reset_username_btn)
-        username_layout.addLayout(username_input_layout)
-
-        # Hinweistext
-        hint_label = QLabel(self.parent.tr("username_hint"))
-        hint_label.setWordWrap(True)
-        hint_label.setStyleSheet("color: #AAAAAA; font-size: 11px; font-style: italic; margin-left: 10px;")
-        hint_label.setMinimumHeight(30)
-        username_layout.addWidget(hint_label)
-
-        username_group.setLayout(username_layout)
-        left_layout.addWidget(username_group)
-
-        # Trennzeichen Gruppe
-        self.sep_group = QGroupBox(self.parent.tr("filename_separator"))
-        sep_layout = QVBoxLayout()
-        self.sep_underscore = QRadioButton(
-            self.parent.tr("filename_separator_underscore")
-        )
-        self.sep_space = QRadioButton(self.parent.tr("filename_separator_space"))
-        self.sep_none = QRadioButton(self.parent.tr("filename_separator_none"))
-        if self.separator == "_":
-            self.sep_underscore.setChecked(True)
-        elif self.separator == " ":
-            self.sep_space.setChecked(True)
-        else:
-            self.sep_none.setChecked(True)
-        self.sep_underscore.toggled.connect(self.update_preview)
-        self.sep_space.toggled.connect(self.update_preview)
-        self.sep_none.toggled.connect(self.update_preview)
-        sep_layout.addSpacing(10)
-        sep_layout.addWidget(self.sep_underscore)
-        sep_layout.addSpacing(10)
-        sep_layout.addWidget(self.sep_space)
-        sep_layout.addSpacing(10)
-        sep_layout.addWidget(self.sep_none)
-        self.sep_group.setLayout(sep_layout)
-        left_layout.addWidget(self.sep_group)
-
-        left_layout.addStretch()
-        options_layout.addWidget(left_widget, 1)
-
-        # Rechte Spalte: Verhalten bei Änderungen + Backup
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-
-        # Verhalten bei Änderungen - eigener Container
-        behavior_widget = QWidget()
-        behavior_layout = QVBoxLayout(behavior_widget)
-        behavior_layout.setContentsMargins(0, 0, 0, 0)
-
-        title_label = QLabel(self.parent.tr("behavior_section").replace("\n", "<br>"))
-        title_label.setTextFormat(Qt.RichText)
-        behavior_layout.addWidget(title_label)
-
-        content_frame = QFrame()
-        content_frame.setFrameShape(QFrame.StyledPanel)
-        content_frame.setStyleSheet(
-            "border: 1px solid #555; border-radius: 4px; padding: 8px;"
-        )
-        content_layout_frame = QVBoxLayout(content_frame)
-
-        self.rb_new_file = QRadioButton(self.parent.tr("behavior_new_file"))
-        self.rb_overwrite = QRadioButton(self.parent.tr("behavior_overwrite"))
-        if self.behavior == "new_file":
-            self.rb_new_file.setChecked(True)
-        else:
-            self.rb_overwrite.setChecked(True)
-        self.rb_new_file.toggled.connect(self.on_behavior_changed)
-        self.rb_overwrite.toggled.connect(self.on_behavior_changed)
-        content_layout_frame.addWidget(self.rb_new_file)
-        content_layout_frame.addWidget(self.rb_overwrite)
-
-        info_label = QLabel(self.parent.tr("behavior_info"))
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet(
-            "color: #AAAAAA; font-style: italic; margin-left: 20px;"
-        )
-        content_layout_frame.addWidget(info_label)
-
-        behavior_layout.addWidget(content_frame)
-        right_layout.addWidget(behavior_widget)
-
-        # Backup-Checkbox
-        self.backup_cb = QCheckBox(self.parent.tr("settings_backup"))
-        self.backup_cb.setChecked(self.create_backup)
-        right_layout.addWidget(self.backup_cb)
-
-        right_layout.addStretch()
-        options_layout.addWidget(right_widget, 1)
-
-        content_layout.addWidget(options_widget)
-
-        # Vorschau-Gruppe (wird auch in ScrollArea eingeschlossen)
-        preview_group = QGroupBox(self.parent.tr("filename_preview_label"))
-        preview_layout = QVBoxLayout()
-        self.preview_label = QLabel()
-        self.preview_label.setFont(QFont("Monospace", 14))
-        self.preview_label.setStyleSheet(
-            "background-color: #3A3A4A; padding: 8px; border-radius: 4px;"
-        )
-        self.preview_label.setWordWrap(True)
-        preview_layout.addWidget(self.preview_label)
-        preview_group.setLayout(preview_layout)
-        content_layout.addWidget(preview_group)
-
-        # Dehnbereich am Ende, damit der Inhalt nicht auseinandergezogen wird
-        content_layout.addStretch()
-
-        scroll_area.setWidget(content_widget)
-        main_layout.addWidget(scroll_area, 1)
-
-        # ========== 3. Fussbereich (Buttons) – KEINE SCROLLAREA ==========
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(10)
-        btn_layout.addStretch()
-
-        ok_btn = QPushButton(self.parent.tr("btn_ok"))
-        self.parent.style_button(ok_btn, "primary", (120, 25))
-        ok_btn.clicked.connect(self.accept)
-
-        cancel_btn = QPushButton(self.parent.tr("btn_cancel"))
-        self.parent.style_button(cancel_btn, "danger", (120, 25))
-        cancel_btn.clicked.connect(self.reject)
-
-        btn_layout.addWidget(ok_btn)
-        btn_layout.addWidget(cancel_btn)
-        main_layout.addLayout(btn_layout)
-
-        # Focus für Tastatursteuerung
-        cancel_btn.setFocusPolicy(Qt.StrongFocus)
-        ok_btn.setFocusPolicy(Qt.StrongFocus)
-
-        # Initialer Aufruf
-        self.on_behavior_changed()
 
     def _reset_username_to_system(self):
         """Setzt den Benutzernamen auf den System-Benutzernamen zurück."""
@@ -4797,6 +4829,11 @@ class PDFPasswordManager:
     @staticmethod
     def get_encryption_key():
         """Erzeugt einen Verschlüsselungsschlüssel für die normalen Passwörter"""
+
+        # Lazy Importe (oben im Code auskommentiert)
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
         salt = b"PDFDarkView_Salt_2024"
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -4810,6 +4847,11 @@ class PDFPasswordManager:
     @staticmethod
     def get_master_encryption_key(master_password):
         """Erzeugt einen Verschlüsselungsschlüssel aus dem Master-Passwort"""
+
+        # Lazy Importe (oben im Code auskommentiert)
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
         if not master_password:
             raise ValueError("Master-Passwort erforderlich")
 
@@ -4826,6 +4868,11 @@ class PDFPasswordManager:
     @staticmethod
     def hash_master_password(password):
         """Erstellt einen Hash des Master-Passworts"""
+
+        # Lazy Importe (oben im Code auskommentiert)
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+
         salt = b"PDFDarkView_Master_Hash_Salt"
         kdf = PBKDF2HMAC(
             algorithm=hashes.SHA256(),
@@ -4921,6 +4968,8 @@ class PDFPasswordManager:
     @staticmethod
     def encrypt_password(password, master_password=None):
         """Verschlüsselt ein Passwort - mit oder ohne Master-PW"""
+        from cryptography.fernet import Fernet # Lazy (nur bei Bedarf ist oben im Code auskommentiert)
+
         try:
             if master_password:
                 # Mit Master-PW verschlüsseln
@@ -4939,6 +4988,7 @@ class PDFPasswordManager:
     @staticmethod
     def decrypt_password(encrypted_password, master_password=None):
         """Entschlüsselt ein Passwort - versucht beide Methoden"""
+        from cryptography.fernet import Fernet # Lazy (nur bei Bedarf ist oben im Code auskommentiert)
         try:
             # Zuerst mit Master-PW versuchen (wenn angegeben)
             if master_password:
@@ -9364,6 +9414,8 @@ def smart_invert_numpy(image, threshold=30):
     gray_threshold: maximaler Abstand zwischen den Farbkanälen (0-255).
                     Je kleiner, desto strenger die Graudefinition.
     """
+
+    import numpy as np # Lazy (oben im Code auskommentiert)
     if image.isNull():
         return image
 
@@ -9452,6 +9504,7 @@ def smart_invert_slow(image, threshold=30):
 
 # Wähle die beste verfügbare Funktion falls NumPy fehlt
 try:
+    import numpy as np # Lazy (oben im Code auskommentiert)
     # Teste, ob NumPy verfügbar ist
     _ = np.array([1])
     SMART_INVERT_FUNCTION = smart_invert_numpy
@@ -12996,6 +13049,7 @@ class DeletePagesWorker(QThread):
             img = img.convert("L")
             img = ImageEnhance.Contrast(img).enhance(2.0)
 
+            import pytesseract # Lazy (ist oben im Code auskommentiert)
             ocr_text = pytesseract.image_to_string(
                 img, lang=Config.OCR_LANGUAGE
             ).strip()
@@ -29173,30 +29227,31 @@ class Language:
     def __init__(self):
         settings = QSettings("BinhDiez", "PDFDarkView")
 
-        # 1. Systemsprache erkennen (für den Fall dass keine gespeicherte Sprache existiert)
+        # 1. Systemsprache erkennen
         self._system_lang = self.get_system_language()
         print(f"\n🌍 Systemsprache erkannt: {self._system_lang}")
 
+        # 2. available initialisieren (NICHT available_languages!)
+        self.available = {}
+        self.current_lang = self._system_lang
 
-        # 2. Gespeicherte Sprache laden
+        # 3. Alle Übersetzungen laden
+        self._load_all_strings()
+
+        # 4. Sprachname anzeigen
+        system_lang_name = self.get_language_name(self._system_lang, native=True)
+        print(f"📝 Sprachname: {system_lang_name}")
+
+        # 5. Gespeicherte Sprache laden
         saved_lang = settings.value("language", None)
 
-        # 3. Entscheiden welche Sprache verwendet wird
         if saved_lang is not None:
-            # Gespeicherte Sprache hat Vorrang
             self.current_lang = saved_lang
             print(f"📁 Verwende gespeicherte Sprache: {self.current_lang}")
         else:
-            # Keine gespeicherte Sprache → Systemsprache verwenden
-            self.current_lang = self._system_lang
-            print(
-                f"🆕 Verwende Systemsprache (keine gespeicherte): {self.current_lang}"
-            )
+            print(f"🆕 Verwende Systemsprache (keine gespeicherte): {self.current_lang}")
 
-        self.available = {}
-        self._load_all_strings()
-
-        # Falls die gewählte Sprache nicht verfügbar ist: auf Deutsch oder Englisch fallen
+        # 6. Fallback
         if self.current_lang not in self.available:
             print(f"⚠️ Sprache {self.current_lang} nicht verfügbar.")
             if "de" in self.available:
@@ -29208,6 +29263,21 @@ class Language:
             else:
                 print("❌ KRITISCH: Weder Deutsch noch Englisch verfügbar!")
                 self.current_lang = None
+
+
+    @property
+    def available_languages(self):
+        """Gibt eine Liste aller verfügbaren Sprachen zurück, sortiert nach sort_name."""
+        result = []
+        for code, info in self.available.items():
+            result.append({
+                "code": code,
+                "name": info["name"],
+                "flag": info["flag"],
+                "sort_name": info["sort_name"],
+            })
+        result.sort(key=lambda x: x["sort_name"].lower())
+        return result
 
     def get_system_language(self):
         """
@@ -29222,10 +29292,12 @@ class Language:
                     langs = NSLocale.preferredLanguages()
                     if langs and len(langs) > 0:
                         lang = langs[0]
-                        # Normalisieren: "de_DE" -> "de"
+                        # Normalisieren: "de_DE" -> "de" oder "de-DE" -> "de"
                         if '_' in lang:
                             lang = lang.split('_')[0]
-                        return lang
+                        elif '-' in lang:
+                            lang = lang.split('-')[0]
+                        return lang[:2]  # Nur die ersten 2 Zeichen
                 except ImportError:
                     pass  # PyObjC nicht verfügbar
 
@@ -29240,7 +29312,7 @@ class Language:
                     # Verwende locale.windows_locale (ab Python 3.6)
                     lang = locale.windows_locale.get(lcid)
                     if lang:
-                        return lang.split('_')[0]
+                        return lang.split('_')[0][:2]
                 except:
                     pass
 
@@ -29252,12 +29324,12 @@ class Language:
                 pass
             lang, _ = locale.getlocale()
             if lang:
-                return lang.split('_')[0]
+                return lang.split('_')[0][:2]
 
             # ----- 4. Umgebungsvariable LANG (Linux, macOS Fallback) -----
             lang = os.environ.get('LANG', '')
             if lang:
-                return lang.split('.')[0].split('_')[0]
+                return lang.split('.')[0].split('_')[0][:2]
 
             # ----- 5. Letzter Fallback -----
             return 'en'
@@ -29379,16 +29451,17 @@ class Language:
         return translations
 
     def _load_all_strings(self):
+        """Lädt alle verfügbaren Übersetzungen."""
         self.available = self._discover_translations()
+        print(f"Endgültige verfügbare Sprachen: {list(self.available.keys())}")
+
+        # Wenn current_lang nicht in available ist, auf Fallback setzen
         if self.current_lang not in self.available:
-            print(
-                f"WARNUNG: Sprache {self.current_lang} nicht verfügbar. Verwende Deutsch."
-            )
-            self.current_lang = "de"
-            if "de" not in self.available:
-                print(
-                    "KRITISCH: Deutsch nicht verfügbar! Bitte translations_de.py prüfen."
-                )
+            if "de" in self.available:
+                self.current_lang = "de"
+            elif "en" in self.available:
+                self.current_lang = "en"
+            else:
                 self.current_lang = None
 
     def tr(self, key, *args, **kwargs):
@@ -29432,184 +29505,27 @@ class Language:
     def get_language_name(self, lang_code=None, native=True):
         if lang_code is None:
             lang_code = self.current_lang
+
+        # Wenn lang_code None oder leer ist
+        if not lang_code:
+            return "Unknown"
+
+        # Versuche den Namen aus available zu holen
         info = self.available.get(lang_code, {})
         if native:
-            return info.get("name", lang_code)
-        else:
-            return lang_code
+            name = info.get("name", None)
+            if name:
+                return name
 
-    def available_languages(self):
-        """Gibt eine Liste aller verfügbaren Sprachen zurück, sortiert nach sort_name."""
-        result = []
-        for code, info in self.available.items():
-            result.append(
-                {
-                    "code": code,
-                    "name": info["name"],
-                    "flag": info["flag"],
-                    "sort_name": info["sort_name"],
-                }
-            )
-        result.sort(key=lambda x: x["sort_name"].lower())
-        return result
+        # Fallback: Versuche den Namen aus LANGUAGE_INFO zu holen
+        if lang_code in LANGUAGE_INFO:
+            return LANGUAGE_INFO[lang_code].get("name", lang_code.upper())
+
+        # Letzter Fallback
+        return lang_code.upper()
 
     def get_flag(self, lang_code):
         return self.available.get(lang_code, {}).get("flag", "🌐")
-
-
-# ====================================================
-# Sprachmenü-Funktionen (außerhalb der Klasse
-# Nicht eingerückt,und genau an dieser Stelle belassen
-# ====================================================
-
-
-def add_language_menu(parent_menu, viewer):
-    """
-    Fügt das Sprachmenü zu einem bestehenden Menü hinzu (dynamisch basierend auf verfügbaren Sprachen).
-    """
-    language_menu = parent_menu.addMenu(
-        qta.icon("fa5s.language"), viewer.tr("menu_language")
-    )
-    language_group = QActionGroup(viewer)
-    language_group.setExclusive(True)
-
-    available = viewer.lang.available_languages()
-    current = viewer.lang.get_language()
-
-    for lang in available:
-        action = QAction(f"{lang['flag']} {lang['name']}", viewer)
-        action.setCheckable(True)
-        action.setChecked(current == lang["code"])
-        action.setData(lang["code"])
-        action.triggered.connect(
-            lambda checked, code=lang["code"]: change_language(viewer, code)
-        )
-        language_group.addAction(action)
-        language_menu.addAction(action)
-
-    return language_menu
-
-
-def change_language(viewer, language_code):
-    """Wechselt die Sprache dynamisch und aktualisiert die UI."""
-    old_lang = viewer.lang.get_language()
-    if old_lang == language_code:
-        return
-
-    if not viewer.lang.set_language(language_code):
-        print(f"DEBUG: Sprache {language_code} nicht verfügbar")
-        return
-
-    # Menüs neu aufbauen
-    if hasattr(viewer, "rebuild_menus"):
-        viewer.rebuild_menus()
-
-    # UI-Elemente aktualisieren
-    if hasattr(viewer, "update_ui_language"):
-        viewer.update_ui_language()
-
-    # Fenstertitel aktualisieren
-    if hasattr(viewer, "pdf_path") and viewer.pdf_path:
-        filename = os.path.basename(viewer.pdf_path)
-        viewer.setWindowTitle(f"{viewer.tr('app_title')} - {filename}")
-    else:
-        viewer.setWindowTitle(viewer.tr("app_title"))
-
-    print(f"DEBUG: Sprache gewechselt von {old_lang} zu {language_code}")
-
-    # Optional: Bestätigung per Sprachausgabe
-    if getattr(viewer, "voice_enabled", False) and hasattr(viewer, "say"):
-        viewer.say(viewer.tr("voice_toggle", viewer.tr("voice_on")))
-
-
-def cycle_language(viewer):
-    """Schaltet zyklisch durch alle verfügbaren Sprachen."""
-    available = viewer.lang.available_languages()
-    if not available:
-        return
-    current = viewer.lang.get_language()
-    codes = [lang["code"] for lang in available]
-    try:
-        idx = codes.index(current)
-        next_idx = (idx + 1) % len(codes)
-    except ValueError:
-        next_idx = 0
-    change_language(viewer, codes[next_idx])
-
-
-def get_language_flag(lang_code, viewer=None):
-    """Gibt die Flagge für einen Sprachcode zurück (nutzt die Language-Instanz, wenn verfügbar)."""
-    if viewer and hasattr(viewer, "lang"):
-        return viewer.lang.get_flag(lang_code)
-    # Fallback-Mapping (falls viewer nicht verfügbar)
-    flags = {
-        "de": "🇩🇪",
-        "en": "🇬🇧",
-        "fr": "🇫🇷",
-        "es": "🇪🇸",
-        "it": "🇮🇹",
-        "pt": "🇵🇹",
-        "ru": "🇷🇺",
-        "zh": "🇨🇳",
-        "ja": "🇯🇵",
-        "ko": "🇰🇷",
-        "ar": "🇸🇦",
-        "tr": "🇹🇷",
-        "nl": "🇳🇱",
-        "pl": "🇵🇱",
-        "sv": "🇸🇪",
-        "no": "🇳🇴",
-        "fi": "🇫🇮",
-        "da": "🇩🇰",
-        "cs": "🇨🇿",
-        "hu": "🇭🇺",
-        "el": "🇬🇷",
-        "he": "🇮🇱",
-        "th": "🇹🇭",
-        "vi": "🇻🇳",
-        "id": "🇮🇩",
-        "ms": "🇲🇾",
-        "ga": "🇮🇪",
-        "ro": "🇷🇴",
-        "sk": "🇸🇰",
-        "lb": "🇱🇺",
-    }
-    return flags.get(lang_code, "🌐")
-
-
-def get_language_name(lang_code, native=False):
-    """Gibt den Namen einer Sprache zurück (native = Originalsprache)."""
-    names = {
-        "de": {"de": "Deutsch", "en": "German"},
-        "en": {"de": "Englisch", "en": "English"},
-        "fr": {"de": "Französisch", "en": "French"},
-        "es": {"de": "Spanisch", "en": "Spanish"},
-        "it": {"de": "Italienisch", "en": "Italian"},
-        "pt": {"de": "Portugiesisch", "en": "Portuguese"},
-        "ru": {"de": "Russisch", "en": "Russian"},
-        "zh": {"de": "Chinesisch", "en": "Chinese"},
-        "ja": {"de": "Japanisch", "en": "Japanese"},
-        "ko": {"de": "Koreanisch", "en": "Korean"},
-        "ar": {"de": "Arabisch", "en": "Arabic"},
-        "tr": {"de": "Türkisch", "en": "Turkish"},
-        "nl": {"de": "Niederländisch", "en": "Dutch"},
-        "pl": {"de": "Polnisch", "en": "Polish"},
-        "sv": {"de": "Schwedisch", "en": "Swedish"},
-        "no": {"de": "Norwegisch", "en": "Norwegian"},
-        "fi": {"de": "Finnisch", "en": "Finnish"},
-        "da": {"de": "Dänisch", "en": "Danish"},
-        "cs": {"de": "Tschechisch", "en": "Czech"},
-        "hu": {"de": "Ungarisch", "en": "Hungarian"},
-        "vi": {"de": "Vietnamesisch", "en": "Vietnamese"},
-        "ga": {"de": "Irisch", "en": "Irish"},
-        "ro": {"de": "Rumänisch", "en": "Romanian"},
-        "sk": {"de": "Slowakisch", "en": "Slovak"},
-        "lb": {"de": "Luxemburgisch", "en": "Luxembourgish"},
-    }
-    if native:
-        return names.get(lang_code, {}).get(lang_code, lang_code)
-    # Standard: deutsche Bezeichnung
-    return names.get(lang_code, {}).get("de", lang_code)
 
 
 ###===============================================
@@ -37910,6 +37826,7 @@ cp -R ~/Downloads/tessdata_backup/* /opt/homebrew/share/tessdata/
 
 
 def get_available_tesseract_languages():
+    import pytesseract # Lazy (ist oben im Code auskommentiert)
     # 1. Versuch: tesseract --list-langs (funktioniert im Entwicklungsmodus)
     try:
         tesseract_cmd = (
@@ -40773,7 +40690,7 @@ class PDFViewer(QMainWindow):
         settings_menu.addSeparator()
 
         # --- Sprachmenü ---
-        add_language_menu(settings_menu, self)
+        self._create_language_menu(settings_menu)
 
         # ==========================================
         # Info-Menü (Hilfe)
@@ -40886,11 +40803,12 @@ class PDFViewer(QMainWindow):
             # Menüleiste aufbauen
             t0 = time.time()
             self.init_menu_bar()
-            self._menu_initialized = True
             print(f"[TIMING] init_menu_bar: {time.time()-t0:.3f}s")
             # Menü-Zustände aktualisieren
             t1 = time.time()
             self.update_menu_states()
+            self.update_zoom_menu_checks()  # ← Hier die Zoom-Haken setzen!
+            self._menu_initialized = True
             print(f"[TIMING] update_menu_states: {time.time()-t1:.3f}s")
             print(f"[TIMING] Verzögertes Laden der Menüleiste (nachdem die GUI sichtbar ist): {time.time()-t0:.3f}s")
 
@@ -41277,73 +41195,6 @@ class PDFViewer(QMainWindow):
                 # Trennlinie nur anzeigen wenn es sowohl davor als auch danach sichtbare Aktionen gibt
                 action.setVisible(has_visible_before and has_visible_after)
 
-    def update_ui_language(self):
-        """Aktualisiert alle UI-Elemente mit Texten nach Sprachwechsel."""
-        # Buttons in der Navigationsleiste
-        self.btn_open.setText(self.tr("btn_open"))
-        self.btn_Textfenster.setText(self.tr("btn_text_window"))
-        self.btn_first.setText(self.tr("btn_first"))
-        self.btn_prev.setText(self.tr("btn_prev"))
-        self.btn_next.setText(self.tr("btn_next"))
-        self.btn_last.setText(self.tr("btn_last"))
-        self.btn_print.setText(self.tr("btn_print"))
-
-        # DarkMode-Button je nach aktuellem Modus
-        if self.dark_mode:
-            self.btn_darkmode.setText(self.tr("btn_darkmode_light"))
-        else:
-            self.btn_darkmode.setText(self.tr("btn_darkmode_dark"))
-
-        # SpinBox-Tooltip
-        self.page_spin.setToolTip(self.tr("goto_page"))
-
-        # Suchleiste (falls sichtbar)
-        if hasattr(self, "search_bar"):
-            self.search_bar.setPlaceholderText(self.tr("search_placeholder"))
-            # Suchstatus-Label (falls gerade aktiv)
-            if hasattr(self, "search_results") and self.search_results:
-                self.search_status_label.setText(
-                    self.tr(
-                        "search_results",
-                        self.current_search_index + 1,
-                        len(self.search_results),
-                    )
-                )
-            else:
-                self.search_status_label.setText(self.tr("search_results", 0, 0))
-
-        # Seitenzahl-Label
-        if hasattr(self, "total_pages"):
-            self.page_count_label.setText(self.tr("page_count", self.total_pages))
-
-        # Statusleisten-Text (z.B. Backup-Status)
-        if hasattr(self, "create_backup"):
-            status = (
-                self.tr("backup_on") if self.create_backup else self.tr("backup_off")
-            )
-            self.statusBar().showMessage(self.tr("backup_status", status), 3000)
-
-        # Optional: auch die Beschriftung des Zoom-Menüs? Das wird über rebuild_menus aktualisiert.
-
-        if hasattr(self, "toggle_navbar_action"):
-            self.toggle_navbar_action.setText(self.tr("view_toggle_navbar"))
-
-    def rebuild_menus(self):
-        """Baut alle Menüs komplett neu auf - wird nach Sprachwechsel aufgerufen"""
-        print(f"DEBUG: Baue Menüs neu auf für Sprache: {self.lang.current_lang}")
-
-        # Alte Menüleiste leeren
-        self.menuBar().clear()
-
-        # Menüs komplett neu erstellen
-        self.init_menu_bar()
-
-        # Menü-Zustände aktualisieren
-        self.update_menu_states()
-
-        # Kurze Verzögerung für die Aktualisierung
-        QApplication.processEvents()
-
     def update_bookmark_menu(self):
         """Aktualisiert das Lesezeichen-Menü (wird nach Änderungen aufgerufen)."""
         # Finde das Lesezeichen-Menü in der Menüleiste
@@ -41626,6 +41477,173 @@ class PDFViewer(QMainWindow):
             return QFont("Helvetica", size)
         else:
             return QFont("Arial", size)
+
+    ### ---------------------------------------
+    ### SPRACHAUSWAHL MENÜ
+    ### ---------------------------------------
+
+    def _create_language_menu(self, parent_menu):
+        """
+        Erstellt das Sprach-Untermenü und fügt es zu einem bestehenden Menü hinzu.
+        """
+        language_menu = parent_menu.addMenu(
+            qta.icon("fa5s.language"), self.tr("menu_language")
+        )
+        language_group = QActionGroup(self)
+        language_group.setExclusive(True)
+
+        # KEINE Klammern mehr – available_languages ist ein Property!
+        available = self.lang.available_languages
+        current = self.lang.get_language()
+
+        for lang in available:
+            action = QAction(f"{lang['flag']} {lang['name']}", self)
+            action.setCheckable(True)
+            action.setChecked(current == lang["code"])
+            action.setData(lang["code"])
+            action.triggered.connect(
+                lambda checked, code=lang["code"]: self._change_language(code)
+            )
+            language_group.addAction(action)
+            language_menu.addAction(action)
+
+        return language_menu
+
+    def _change_language(self, language_code):
+        """Wechselt die Sprache dynamisch und aktualisiert die UI."""
+        old_lang = self.lang.get_language()
+        if old_lang == language_code:
+            return
+
+        if not self.lang.set_language(language_code):
+            print(f"DEBUG: Sprache {language_code} nicht verfügbar")
+            return
+
+        # Menüs neu aufbauen (wenn vorhanden)
+        if hasattr(self, "rebuild_menus"):
+            self.rebuild_menus()
+
+        # UI-Elemente aktualisieren (wenn vorhanden)
+        if hasattr(self, "update_ui_language"):
+            self.update_ui_language()
+
+        # Fenstertitel aktualisieren
+        if self.pdf_path and os.path.exists(self.pdf_path):
+            filename = os.path.basename(self.pdf_path)
+            self.setWindowTitle(f"{self.tr('app_title')} - {filename}")
+        else:
+            self.setWindowTitle(self.tr("app_title"))
+
+        print(f"DEBUG: Sprache gewechselt von {old_lang} zu {language_code}")
+
+        # Bestätigung per Sprachausgabe
+        if self.voice_enabled and hasattr(self, "say"):
+            self.say(self.tr("voice_toggle", self.tr("voice_on")))
+
+    def _cycle_language(self):
+        """Schaltet zyklisch durch alle verfügbaren Sprachen."""
+        available = self.lang.available_languages  # KEINE Klammern!
+        if not available:
+            return
+        current = self.lang.get_language()
+        codes = [lang["code"] for lang in available]
+        try:
+            idx = codes.index(current)
+            next_idx = (idx + 1) % len(codes)
+        except ValueError:
+            next_idx = 0
+        self._change_language(codes[next_idx])
+
+    def _get_language_flag(self, lang_code):
+        """Gibt die Flagge für einen Sprachcode zurück."""
+        return self.lang.get_flag(lang_code)
+
+    def _get_language_name(self, lang_code, native=False):
+        """Gibt den Namen einer Sprache zurück (native = Originalsprache)."""
+        info = self.lang.available.get(lang_code, {})
+        if native:
+            return info.get("name", lang_code.upper())
+        # Standard: deutsche Bezeichnung
+        name = info.get("name", lang_code.upper())
+        # Wenn die Sprache nicht in available ist, Fallback
+        if not info:
+            fallback_names = {
+                "de": "Deutsch",
+                "en": "Englisch",
+                "fr": "Französisch",
+                "es": "Spanisch",
+                "it": "Italienisch",
+                # ... weitere Fallbacks ...
+            }
+            return fallback_names.get(lang_code, lang_code.upper())
+        return name
+
+    def update_ui_language(self):
+        """Aktualisiert alle UI-Elemente mit Texten nach Sprachwechsel."""
+        # Buttons in der Navigationsleiste
+        self.btn_open.setText(self.tr("btn_open"))
+        self.btn_Textfenster.setText(self.tr("btn_text_window"))
+        self.btn_first.setText(self.tr("btn_first"))
+        self.btn_prev.setText(self.tr("btn_prev"))
+        self.btn_next.setText(self.tr("btn_next"))
+        self.btn_last.setText(self.tr("btn_last"))
+        self.btn_print.setText(self.tr("btn_print"))
+
+        # DarkMode-Button je nach aktuellem Modus
+        if self.dark_mode:
+            self.btn_darkmode.setText(self.tr("btn_darkmode_light"))
+        else:
+            self.btn_darkmode.setText(self.tr("btn_darkmode_dark"))
+
+        # SpinBox-Tooltip
+        self.page_spin.setToolTip(self.tr("goto_page"))
+
+        # Suchleiste (falls sichtbar)
+        if hasattr(self, "search_bar"):
+            self.search_bar.setPlaceholderText(self.tr("search_placeholder"))
+            # Suchstatus-Label (falls gerade aktiv)
+            if hasattr(self, "search_results") and self.search_results:
+                self.search_status_label.setText(
+                    self.tr(
+                        "search_results",
+                        self.current_search_index + 1,
+                        len(self.search_results),
+                    )
+                )
+            else:
+                self.search_status_label.setText(self.tr("search_results", 0, 0))
+
+        # Seitenzahl-Label
+        if hasattr(self, "total_pages"):
+            self.page_count_label.setText(self.tr("page_count", self.total_pages))
+
+        # Statusleisten-Text (z.B. Backup-Status)
+        if hasattr(self, "create_backup"):
+            status = (
+                self.tr("backup_on") if self.create_backup else self.tr("backup_off")
+            )
+            self.statusBar().showMessage(self.tr("backup_status", status), 3000)
+
+        # Optional: auch die Beschriftung des Zoom-Menüs? Das wird über rebuild_menus aktualisiert.
+
+        if hasattr(self, "toggle_navbar_action"):
+            self.toggle_navbar_action.setText(self.tr("view_toggle_navbar"))
+
+    def rebuild_menus(self):
+        """Baut alle Menüs komplett neu auf - wird nach Sprachwechsel aufgerufen"""
+        print(f"DEBUG: Baue Menüs neu auf für Sprache: {self.lang.current_lang}")
+
+        # Alte Menüleiste leeren
+        self.menuBar().clear()
+
+        # Menüs komplett neu erstellen
+        self.init_menu_bar()
+
+        # Menü-Zustände aktualisieren
+        self.update_menu_states()
+
+        # Kurze Verzögerung für die Aktualisierung
+        QApplication.processEvents()
 
     ###---------------------------------------
     ### BACKUPS
@@ -43752,7 +43770,9 @@ class PDFViewer(QMainWindow):
             # -------------------------------------------------------
 
             # MENÜ-HAKEN AKTUALISIEREN BEIM NEUEN PDF
-            self.update_zoom_menu_checks()
+            # Nur aufrufen, wenn Menü bereits initialisiert ist
+            if hasattr(self, 'zoom_page_action') and self.zoom_page_action is not None:
+                self.update_zoom_menu_checks()
 
             # ---- Automatisches Öffnen des Textfensters, wenn gewünscht ----
             if self._open_text_window_next:
@@ -61165,6 +61185,9 @@ class PDFViewer(QMainWindow):
 
     def update_zoom_menu_checks(self):
         """Aktualisiert die Haken im Zoom-Menü basierend auf dem aktuellen Modus"""
+        # ===== SCHUTZ: Wenn Menü noch nicht initialisiert, überspringen =====
+        if not hasattr(self, 'zoom_page_action') or self.zoom_page_action is None:
+            return
         # Alle Checks zurücksetzen
         self.zoom_page_action.setChecked(False)
         self.zoom_two_pages_action.setChecked(False)
@@ -62011,7 +62034,7 @@ def main():
         file_open_filter = MacFileOpenFilter(viewer)
         app.installEventFilter(file_open_filter)
 
-    # Nur zum Testen aktivieren!
+    # Nur zum Testen aktivieren! (geht bei jedem 2.Start)
     # viewer.reset_welcome_dialog() # Willkommen
 
     # OCR-Status an den Viewer übergeben
