@@ -2182,105 +2182,530 @@ class FilenameSettingsDialog(QDialog):
         if self.width() > max_dialog_width:
             self.resize(max_dialog_width, self.height())
 
+    # def init_ui(self):
+    #     """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
+    #     # Hauptlayout (vertikal)
+    #     main_layout = QVBoxLayout(self)
+    #     main_layout.setContentsMargins(8, 8, 8, 8)  # Kleinere Ränder
+    #     main_layout.setSpacing(8)  # Weniger Abstand
+
+    #     # ========== 1. Kopfbereich (Header) – KEINE SCROLLAREA ==========
+    #     header = QWidget()
+    #     header_layout = QHBoxLayout(header)
+    #     header_layout.setContentsMargins(0, 0, 0, 15)
+    #     header_layout.setSpacing(10)
+
+    #     header_layout.addStretch(1)
+
+    #     if os.path.exists(Config.IMAGE_PATH):
+    #         self.logo_label = QLabel()
+    #         logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
+    #             80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
+    #         )
+    #         self.logo_label.setPixmap(logo_pixmap)
+    #         self.logo_label.setAlignment(Qt.AlignVCenter)
+    #         header_layout.addWidget(self.logo_label)
+    #         header_layout.addStretch(1)
+
+    #     self.title_label = QLabel(self.parent.tr("filename_settings_dialog_title"))
+    #     self.title_label.setStyleSheet("""
+    #         QLabel {
+    #             color: white;
+    #             font-size: 20px;
+    #             font-weight: bold;
+    #             padding: 5px;
+    #         }
+    #     """)
+    #     self.title_label.setAlignment(Qt.AlignCenter)
+    #     header_layout.addWidget(self.title_label)
+    #     header_layout.addStretch(1)
+
+    #     if os.path.exists(Config.APP_ICON_PATH):
+    #         self.icon_label = QLabel()
+    #         icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
+    #             50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
+    #         )
+    #         self.icon_label.setPixmap(icon_pixmap)
+    #         self.icon_label.setAlignment(Qt.AlignVCenter)
+    #         header_layout.addWidget(self.icon_label)
+
+    #     header_layout.addStretch(1)
+    #     main_layout.addWidget(header)
+
+
+    #     # ========== 2. ScrollArea für den gesamten interaktiven Inhalt ==========
+    #     scroll_area = QScrollArea()
+    #     scroll_area.setWidgetResizable(True)
+    #     scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+    #     scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+    #     scroll_area.setStyleSheet("""
+    #         QScrollArea {
+    #             border: none;
+    #             background-color: transparent;
+    #         }
+    #         QScrollBar:vertical {
+    #             background: #3D3D3D;
+    #             width: 14px;
+    #             margin: 0px;
+    #         }
+    #         QScrollBar::handle:vertical {
+    #             background: #AAAAAA;
+    #             min-height: 20px;
+    #             border-radius: 7px;
+    #         }
+    #         QScrollBar::handle:vertical:hover {
+    #             background: #CCCCCC;
+    #         }
+    #         QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
+    #             height: 0px;
+    #         }
+    #     """)
+
+    #     # Container für den Inhalt der ScrollArea
+    #     content_widget = QWidget()
+    #     content_widget.setStyleSheet("background-color: #1E1E1E;")
+    #     content_layout = QVBoxLayout(content_widget)
+    #     content_layout.setContentsMargins(8, 8, 8, 8)
+    #     content_layout.setSpacing(12)
+
+    #     # ================= Zwei horizontale Bereiche (Optionen) =================
+    #     options_widget = QWidget()
+    #     options_layout = QHBoxLayout(options_widget)
+    #     options_layout.setSpacing(15)
+
+    #     # Linke Spalte: Formatierungsoptionen (Zeitstempel + Benutzername)
+    #     left_widget = QWidget()
+    #     left_layout = QVBoxLayout(left_widget)
+    #     left_layout.setSpacing(10)
+
+    #     # Zeitstempel Gruppe - kompakter
+    #     self.ts_group = QGroupBox(self.parent.tr("filename_use_timestamp"))
+    #     self.ts_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+    #     ts_layout = QFormLayout()
+    #     ts_layout.setSpacing(5)
+    #     ts_layout.setContentsMargins(8, 8, 8, 8)
+
+    #     self.use_ts_cb = QCheckBox(self.parent.tr("filename_use_timestamp"))
+    #     self.use_ts_cb.setChecked(self.use_timestamp)
+    #     self.use_ts_cb.toggled.connect(self.update_preview)
+    #     ts_layout.addRow(self.use_ts_cb)
+
+    #     self.ts_format_combo = QComboBox()
+    #     now = datetime.now()
+    #     formats = [
+    #         ("%Y%m%d_%H%M%S", now.strftime("%Y%m%d_%H%M%S")),
+    #         ("%Y-%m-%d_%H%M%S", now.strftime("%Y-%m-%d_%H%M%S")),
+    #         ("%Y%m%d_%H%M", now.strftime("%Y%m%d_%H%M")),
+    #         ("%Y-%m-%d_%H%M", now.strftime("%Y-%m-%d_%H%M")),
+    #         ("%Y%m%d", now.strftime("%Y%m%d")),
+    #         ("%Y-%m-%d", now.strftime("%Y-%m-%d")),
+    #         ("%d.%m.%Y_%H%M%S", now.strftime("%d.%m.%Y_%H%M%S")),
+    #         ("%d.%m.%Y_%H%M", now.strftime("%d.%m.%Y_%H%M")),
+    #     ]
+    #     for fmt, example in formats:
+    #         self.ts_format_combo.addItem(example, fmt)
+    #     idx = self.ts_format_combo.findData(self.timestamp_format)
+    #     if idx >= 0:
+    #         self.ts_format_combo.setCurrentIndex(idx)
+    #     self.ts_format_combo.currentIndexChanged.connect(self.update_preview)
+    #     ts_layout.addRow(
+    #         self.parent.tr("filename_timestamp_format") + ":", self.ts_format_combo
+    #     )
+
+    #     self.ts_pos_combo = QComboBox()
+    #     self.ts_pos_combo.addItem(
+    #         self.parent.tr("filename_timestamp_position_before"), "before"
+    #     )
+    #     self.ts_pos_combo.addItem(
+    #         self.parent.tr("filename_timestamp_position_after"), "after"
+    #     )
+    #     self.ts_pos_combo.addItem(
+    #         self.parent.tr("filename_timestamp_position_end"), "end"
+    #     )
+    #     idx = self.ts_pos_combo.findData(self.timestamp_position)
+    #     if idx >= 0:
+    #         self.ts_pos_combo.setCurrentIndex(idx)
+    #     self.ts_pos_combo.currentIndexChanged.connect(self.update_preview)
+    #     ts_layout.addRow(
+    #         self.parent.tr("filename_timestamp_position") + ":", self.ts_pos_combo
+    #     )
+
+    #     self.ts_group.setLayout(ts_layout)
+    #     left_layout.addWidget(self.ts_group)
+
+    #     # Benutzername Gruppe - kompakter
+    #     username_group = QGroupBox(self.parent.tr("username_in_suffix"))
+    #     username_group.setStyleSheet("""
+    #         QGroupBox {
+    #             border: 1px solid #555;
+    #             border-radius: 4px;
+    #             margin-top: 3px;
+    #             padding-top: 8px;
+    #         }
+    #         QGroupBox::title {
+    #             subcontrol-origin: margin;
+    #             left: 10px;
+    #             padding: 0 5px;
+    #         }
+    #     """)
+    #     username_layout = QVBoxLayout()
+    #     username_layout.setSpacing(5)
+    #     username_layout.setContentsMargins(8, 8, 8, 8)
+
+    #     self.use_username_cb = QCheckBox(self.parent.tr("username_in_suffix_enable"))
+    #     self.use_username_cb.setChecked(self.use_username_in_suffix)
+    #     self.use_username_cb.toggled.connect(self.update_preview)
+    #     username_layout.addWidget(self.use_username_cb)
+
+    #     username_input_layout = QHBoxLayout()
+    #     username_input_layout.setSpacing(8)
+
+    #     username_label = QLabel(self.parent.tr("username_label"))
+    #     username_label.setStyleSheet("color: #FFFFFF; font-weight: bold;")
+    #     username_label.setMinimumWidth(80)
+
+    #     self.username_input = QLineEdit()
+    #     self.username_input.setText(self.username)
+    #     self.username_input.setPlaceholderText(self.parent.tr("username_placeholder"))
+    #     self.username_input.setStyleSheet("""
+    #         QLineEdit {
+    #             background-color: #2D2D2D;
+    #             border: 1px solid #666;
+    #             border-radius: 4px;
+    #             padding: 4px;
+    #             color: #FFFFFF;
+    #             font-size: 13px;
+    #         }
+    #         QLineEdit:focus {
+    #             border: 1px solid #197602;
+    #         }
+    #         QLineEdit:disabled {
+    #             background-color: #3D3D3D;
+    #             color: #888888;
+    #         }
+    #     """)
+    #     self.username_input.textChanged.connect(self.update_preview)
+    #     self.username_input.setEnabled(self.use_username_in_suffix)
+    #     self.use_username_cb.toggled.connect(self.username_input.setEnabled)
+
+    #     reset_username_btn = QPushButton(self.parent.tr("username_reset"))
+    #     reset_username_btn.setFixedWidth(70)
+    #     reset_username_btn.setStyleSheet("""
+    #         QPushButton {
+    #             background-color: #2D2D2D;
+    #             border: 1px solid #666;
+    #             border-radius: 4px;
+    #             color: white;
+    #             font-size: 11px;
+    #             padding: 3px 6px;
+    #         }
+    #         QPushButton:hover {
+    #             background-color: #3D3D3D;
+    #             border-color: #777;
+    #         }
+    #     """)
+    #     reset_username_btn.clicked.connect(self._reset_username_to_system)
+
+    #     username_input_layout.addWidget(username_label)
+    #     username_input_layout.addWidget(self.username_input, 1)
+    #     username_input_layout.addWidget(reset_username_btn)
+    #     username_layout.addLayout(username_input_layout)
+
+    #     # Hinweistext - kleiner und kompakter
+    #     hint_label = QLabel(self.parent.tr("username_hint"))
+    #     hint_label.setWordWrap(True)
+    #     hint_label.setStyleSheet("color: #AAAAAA; font-size: 10px; font-style: italic; margin-left: 8px;")
+    #     hint_label.setMinimumHeight(25)
+    #     username_layout.addWidget(hint_label)
+
+    #     username_group.setLayout(username_layout)
+    #     left_layout.addWidget(username_group)
+
+    #     # Trennzeichen Gruppe - kompakter
+    #     self.sep_group = QGroupBox(self.parent.tr("filename_separator"))
+    #     self.sep_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+    #     sep_layout = QVBoxLayout()
+    #     sep_layout.setSpacing(5)
+    #     sep_layout.setContentsMargins(8, 8, 8, 8)
+
+    #     self.sep_underscore = QRadioButton(self.parent.tr("filename_separator_underscore"))
+    #     self.sep_space = QRadioButton(self.parent.tr("filename_separator_space"))
+    #     self.sep_none = QRadioButton(self.parent.tr("filename_separator_none"))
+
+    #     if self.separator == "_":
+    #         self.sep_underscore.setChecked(True)
+    #     elif self.separator == " ":
+    #         self.sep_space.setChecked(True)
+    #     else:
+    #         self.sep_none.setChecked(True)
+
+    #     self.sep_underscore.toggled.connect(self.update_preview)
+    #     self.sep_space.toggled.connect(self.update_preview)
+    #     self.sep_none.toggled.connect(self.update_preview)
+
+    #     sep_layout.addWidget(self.sep_underscore)
+    #     sep_layout.addWidget(self.sep_space)
+    #     sep_layout.addWidget(self.sep_none)
+    #     self.sep_group.setLayout(sep_layout)
+    #     left_layout.addWidget(self.sep_group)
+
+    #     left_layout.addStretch()
+    #     options_layout.addWidget(left_widget, 1)
+
+    #     # Rechte Spalte: Verhalten bei Änderungen + Backup
+    #     right_widget = QWidget()
+    #     right_layout = QVBoxLayout(right_widget)
+    #     right_layout.setSpacing(10)
+
+    #     # Verhalten bei Änderungen - kompakter
+    #     behavior_widget = QWidget()
+    #     behavior_layout = QVBoxLayout(behavior_widget)
+    #     behavior_layout.setContentsMargins(0, 0, 0, 0)
+    #     behavior_layout.setSpacing(5)
+
+    #     title_label = QLabel(self.parent.tr("behavior_section").replace("\n", "<br>"))
+    #     title_label.setTextFormat(Qt.RichText)
+    #     title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
+    #     behavior_layout.addWidget(title_label)
+
+    #     content_frame = QFrame()
+    #     content_frame.setFrameShape(QFrame.StyledPanel)
+    #     content_frame.setStyleSheet("border: 1px solid #555; border-radius: 4px; padding: 6px;")
+    #     content_layout_frame = QVBoxLayout(content_frame)
+    #     content_layout_frame.setSpacing(5)
+
+    #     self.rb_new_file = QRadioButton(self.parent.tr("behavior_new_file"))
+    #     self.rb_overwrite = QRadioButton(self.parent.tr("behavior_overwrite"))
+
+    #     if self.behavior == "new_file":
+    #         self.rb_new_file.setChecked(True)
+    #     else:
+    #         self.rb_overwrite.setChecked(True)
+
+    #     self.rb_new_file.toggled.connect(self.on_behavior_changed)
+    #     self.rb_overwrite.toggled.connect(self.on_behavior_changed)
+    #     content_layout_frame.addWidget(self.rb_new_file)
+    #     content_layout_frame.addWidget(self.rb_overwrite)
+
+    #     info_label = QLabel(self.parent.tr("behavior_info"))
+    #     info_label.setWordWrap(True)
+    #     info_label.setStyleSheet("color: #AAAAAA; font-style: italic; font-size: 11px; margin-left: 20px;")
+    #     content_layout_frame.addWidget(info_label)
+
+    #     behavior_layout.addWidget(content_frame)
+    #     right_layout.addWidget(behavior_widget)
+
+    #     # Backup-Checkbox
+    #     self.backup_cb = QCheckBox(self.parent.tr("settings_backup"))
+    #     self.backup_cb.setChecked(self.create_backup)
+    #     self.backup_cb.setStyleSheet("font-size: 12px;")
+    #     right_layout.addWidget(self.backup_cb)
+
+    #     right_layout.addStretch()
+    #     options_layout.addWidget(right_widget, 1)
+
+    #     content_layout.addWidget(options_widget)
+
+    #     # Vorschau-Gruppe - kompakter
+    #     preview_group = QGroupBox(self.parent.tr("filename_preview_label"))
+    #     preview_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+    #     preview_layout = QVBoxLayout()
+    #     preview_layout.setContentsMargins(8, 8, 8, 8)
+
+    #     self.preview_label = QLabel()
+    #     self.preview_label.setFont(QFont("Monospace", 12))
+    #     self.preview_label.setStyleSheet("background-color: #3A3A4A; padding: 6px; border-radius: 4px;")
+    #     self.preview_label.setWordWrap(True)
+    #     self.preview_label.setMinimumHeight(30)
+    #     preview_layout.addWidget(self.preview_label)
+    #     preview_group.setLayout(preview_layout)
+    #     content_layout.addWidget(preview_group)
+
+    #     # Weniger Platz am Ende
+    #     content_layout.addStretch()
+
+    #     scroll_area.setWidget(content_widget)
+    #     main_layout.addWidget(scroll_area, 1)
+
+    #     # ========== 3. Fussbereich (Buttons) – IMMER SICHTBAR ==========
+    #     btn_widget = QWidget()
+    #     btn_widget.setMaximumHeight(60)  # Begrenzung der Button-Höhe
+    #     btn_layout = QHBoxLayout(btn_widget)
+    #     btn_layout.setContentsMargins(0, 8, 0, 8)
+    #     btn_layout.setSpacing(10)
+    #     btn_layout.addStretch()
+
+    #     ok_btn = QPushButton(self.parent.tr("btn_ok"))
+    #     self.parent.style_button(ok_btn, "primary", (100, 25))
+    #     ok_btn.clicked.connect(self.accept)
+
+    #     cancel_btn = QPushButton(self.parent.tr("btn_cancel"))
+    #     self.parent.style_button(cancel_btn, "danger", (100, 25))
+    #     cancel_btn.clicked.connect(self.reject)
+
+    #     btn_layout.addWidget(ok_btn)
+    #     btn_layout.addWidget(cancel_btn)
+
+    #     main_layout.addWidget(btn_widget)
+
+    #     # Focus für Tastatursteuerung
+    #     cancel_btn.setFocusPolicy(Qt.StrongFocus)
+    #     ok_btn.setFocusPolicy(Qt.StrongFocus)
+
+    #     # Initialer Aufruf
+    #     self.on_behavior_changed()
+
     def init_ui(self):
         """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
-        # Hauptlayout (vertikal)
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(8, 8, 8, 8)  # Kleinere Ränder
-        main_layout.setSpacing(8)  # Weniger Abstand
 
-        # ========== 1. Kopfbereich (Header) – KEINE SCROLLAREA ==========
+        # Einheitliche Standardschrift für macOS und Windows
+        dialog_font = QFont()
+        dialog_font.setFamilies(["Segoe UI", "SF Pro Text", "Arial", "Helvetica"])
+        dialog_font.setPointSize(12)
+        self.setFont(dialog_font)
+
+        # Globales Stylesheet ohne feste Pixel-Schriftgrößen
+        self.setStyleSheet("""
+            QWidget {
+                background-color: #1E1E1E;
+                color: white;
+            }
+
+            QGroupBox {
+                border: 1px solid #555;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 8px;
+                font-size: 14pt;
+                font-weight: bold;
+            }
+
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 4px;
+            }
+
+            QCheckBox,
+            QRadioButton {
+                font-size: 12pt;
+                spacing: 8px;
+            }
+
+            QComboBox,
+            QLineEdit {
+                background-color: #2D2D2D;
+                border: 1px solid #666;
+                border-radius: 4px;
+                padding: 5px;
+                font-size: 12pt;
+            }
+
+            QComboBox:focus,
+            QLineEdit:focus {
+                border: 1px solid #197602;
+            }
+
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+
+            QScrollBar:vertical {
+                background: #3D3D3D;
+                width: 14px;
+            }
+
+            QScrollBar::handle:vertical {
+                background: #AAAAAA;
+                border-radius: 7px;
+                min-height: 20px;
+            }
+
+            QScrollBar::handle:vertical:hover {
+                background: #CCCCCC;
+            }
+
+            QScrollBar::sub-line:vertical,
+            QScrollBar::add-line:vertical {
+                height: 0px;
+            }
+        """)
+
+        # Hauptlayout
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(8, 8, 8, 8)
+        main_layout.setSpacing(8)
+
+        # ================= Header =================
+
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 15)
         header_layout.setSpacing(10)
 
-        header_layout.addStretch(1)
+        header_layout.addStretch()
 
         if os.path.exists(Config.IMAGE_PATH):
             self.logo_label = QLabel()
-            logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
-                80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self.logo_label.setPixmap(
+                QPixmap(Config.IMAGE_PATH).scaled(
+                    80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
             )
-            self.logo_label.setPixmap(logo_pixmap)
-            self.logo_label.setAlignment(Qt.AlignVCenter)
             header_layout.addWidget(self.logo_label)
-            header_layout.addStretch(1)
+
+        header_layout.addStretch()
 
         self.title_label = QLabel(self.parent.tr("filename_settings_dialog_title"))
-        self.title_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                padding: 5px;
-            }
-        """)
+
+        title_font = QFont(dialog_font)
+        title_font.setPointSize(20)
+        title_font.setBold(True)
+
+        self.title_label.setFont(title_font)
         self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setStyleSheet("padding:5px;")
+
         header_layout.addWidget(self.title_label)
-        header_layout.addStretch(1)
+
+        header_layout.addStretch()
 
         if os.path.exists(Config.APP_ICON_PATH):
             self.icon_label = QLabel()
-            icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
-                50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
+            self.icon_label.setPixmap(
+                QPixmap(Config.APP_ICON_PATH).scaled(
+                    50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
+                )
             )
-            self.icon_label.setPixmap(icon_pixmap)
-            self.icon_label.setAlignment(Qt.AlignVCenter)
             header_layout.addWidget(self.icon_label)
 
-        header_layout.addStretch(1)
+        header_layout.addStretch()
+
         main_layout.addWidget(header)
 
+        # ================= ScrollArea =================
 
-        # ========== 2. ScrollArea für den gesamten interaktiven Inhalt ==========
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-        scroll_area.setStyleSheet("""
-            QScrollArea {
-                border: none;
-                background-color: transparent;
-            }
-            QScrollBar:vertical {
-                background: #3D3D3D;
-                width: 14px;
-                margin: 0px;
-            }
-            QScrollBar::handle:vertical {
-                background: #AAAAAA;
-                min-height: 20px;
-                border-radius: 7px;
-            }
-            QScrollBar::handle:vertical:hover {
-                background: #CCCCCC;
-            }
-            QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
-                height: 0px;
-            }
-        """)
 
-        # Container für den Inhalt der ScrollArea
         content_widget = QWidget()
-        content_widget.setStyleSheet("background-color: #1E1E1E;")
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(8, 8, 8, 8)
         content_layout.setSpacing(12)
 
-        # ================= Zwei horizontale Bereiche (Optionen) =================
         options_widget = QWidget()
         options_layout = QHBoxLayout(options_widget)
         options_layout.setSpacing(15)
 
-        # Linke Spalte: Formatierungsoptionen (Zeitstempel + Benutzername)
+        # ================= Linke Seite =================
+
         left_widget = QWidget()
         left_layout = QVBoxLayout(left_widget)
         left_layout.setSpacing(10)
 
-        # Zeitstempel Gruppe - kompakter
         self.ts_group = QGroupBox(self.parent.tr("filename_use_timestamp"))
-        self.ts_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
         ts_layout = QFormLayout()
         ts_layout.setSpacing(5)
         ts_layout.setContentsMargins(8, 8, 8, 8)
@@ -2291,6 +2716,7 @@ class FilenameSettingsDialog(QDialog):
         ts_layout.addRow(self.use_ts_cb)
 
         self.ts_format_combo = QComboBox()
+
         now = datetime.now()
         formats = [
             ("%Y%m%d_%H%M%S", now.strftime("%Y%m%d_%H%M%S")),
@@ -2302,106 +2728,97 @@ class FilenameSettingsDialog(QDialog):
             ("%d.%m.%Y_%H%M%S", now.strftime("%d.%m.%Y_%H%M%S")),
             ("%d.%m.%Y_%H%M", now.strftime("%d.%m.%Y_%H%M")),
         ]
+
         for fmt, example in formats:
             self.ts_format_combo.addItem(example, fmt)
+
         idx = self.ts_format_combo.findData(self.timestamp_format)
         if idx >= 0:
             self.ts_format_combo.setCurrentIndex(idx)
+
         self.ts_format_combo.currentIndexChanged.connect(self.update_preview)
+
         ts_layout.addRow(
-            self.parent.tr("filename_timestamp_format") + ":", self.ts_format_combo
+            self.parent.tr("filename_timestamp_format") + ":",
+            self.ts_format_combo,
         )
 
         self.ts_pos_combo = QComboBox()
+
         self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_before"), "before"
+            self.parent.tr("filename_timestamp_position_before"),
+            "before",
         )
         self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_after"), "after"
+            self.parent.tr("filename_timestamp_position_after"),
+            "after",
         )
         self.ts_pos_combo.addItem(
-            self.parent.tr("filename_timestamp_position_end"), "end"
+            self.parent.tr("filename_timestamp_position_end"),
+            "end",
         )
+
         idx = self.ts_pos_combo.findData(self.timestamp_position)
         if idx >= 0:
             self.ts_pos_combo.setCurrentIndex(idx)
+
         self.ts_pos_combo.currentIndexChanged.connect(self.update_preview)
+
         ts_layout.addRow(
-            self.parent.tr("filename_timestamp_position") + ":", self.ts_pos_combo
+            self.parent.tr("filename_timestamp_position") + ":",
+            self.ts_pos_combo,
         )
 
         self.ts_group.setLayout(ts_layout)
         left_layout.addWidget(self.ts_group)
 
-        # Benutzername Gruppe - kompakter
+        # Benutzername
+
         username_group = QGroupBox(self.parent.tr("username_in_suffix"))
-        username_group.setStyleSheet("""
-            QGroupBox {
-                border: 1px solid #555;
-                border-radius: 4px;
-                margin-top: 3px;
-                padding-top: 8px;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
-        """)
+
         username_layout = QVBoxLayout()
         username_layout.setSpacing(5)
         username_layout.setContentsMargins(8, 8, 8, 8)
 
-        self.use_username_cb = QCheckBox(self.parent.tr("username_in_suffix_enable"))
+        self.use_username_cb = QCheckBox(
+            self.parent.tr("username_in_suffix_enable")
+        )
         self.use_username_cb.setChecked(self.use_username_in_suffix)
         self.use_username_cb.toggled.connect(self.update_preview)
         username_layout.addWidget(self.use_username_cb)
 
         username_input_layout = QHBoxLayout()
-        username_input_layout.setSpacing(8)
 
         username_label = QLabel(self.parent.tr("username_label"))
-        username_label.setStyleSheet("color: #FFFFFF; font-weight: bold;")
+        username_font = QFont(dialog_font)
+        username_font.setBold(True)
+        username_label.setFont(username_font)
         username_label.setMinimumWidth(80)
 
         self.username_input = QLineEdit()
         self.username_input.setText(self.username)
-        self.username_input.setPlaceholderText(self.parent.tr("username_placeholder"))
-        self.username_input.setStyleSheet("""
-            QLineEdit {
-                background-color: #2D2D2D;
-                border: 1px solid #666;
-                border-radius: 4px;
-                padding: 4px;
-                color: #FFFFFF;
-                font-size: 13px;
-            }
-            QLineEdit:focus {
-                border: 1px solid #197602;
-            }
-            QLineEdit:disabled {
-                background-color: #3D3D3D;
-                color: #888888;
-            }
-        """)
+        self.username_input.setPlaceholderText(
+            self.parent.tr("username_placeholder")
+        )
         self.username_input.textChanged.connect(self.update_preview)
         self.username_input.setEnabled(self.use_username_in_suffix)
         self.use_username_cb.toggled.connect(self.username_input.setEnabled)
 
-        reset_username_btn = QPushButton(self.parent.tr("username_reset"))
+        reset_username_btn = QPushButton(
+            self.parent.tr("username_reset")
+        )
         reset_username_btn.setFixedWidth(70)
         reset_username_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #2D2D2D;
-                border: 1px solid #666;
-                border-radius: 4px;
-                color: white;
-                font-size: 11px;
-                padding: 3px 6px;
+            QPushButton{
+                background:#2D2D2D;
+                border:1px solid #666;
+                border-radius:4px;
+                color:white;
+                padding:3px 6px;
             }
-            QPushButton:hover {
-                background-color: #3D3D3D;
-                border-color: #777;
+            QPushButton:hover{
+                background:#3D3D3D;
+                border-color:#777;
             }
         """)
         reset_username_btn.clicked.connect(self._reset_username_to_system)
@@ -2409,28 +2826,40 @@ class FilenameSettingsDialog(QDialog):
         username_input_layout.addWidget(username_label)
         username_input_layout.addWidget(self.username_input, 1)
         username_input_layout.addWidget(reset_username_btn)
+
         username_layout.addLayout(username_input_layout)
 
-        # Hinweistext - kleiner und kompakter
         hint_label = QLabel(self.parent.tr("username_hint"))
         hint_label.setWordWrap(True)
-        hint_label.setStyleSheet("color: #AAAAAA; font-size: 10px; font-style: italic; margin-left: 8px;")
-        hint_label.setMinimumHeight(25)
+
+        hint_font = QFont(dialog_font)
+        hint_font.setPointSize(9)
+        hint_font.setItalic(True)
+        hint_label.setFont(hint_font)
+        hint_label.setStyleSheet("color:#AAAAAA;margin-left:8px;")
+
         username_layout.addWidget(hint_label)
 
         username_group.setLayout(username_layout)
         left_layout.addWidget(username_group)
 
-        # Trennzeichen Gruppe - kompakter
+        # Trennzeichen
+
         self.sep_group = QGroupBox(self.parent.tr("filename_separator"))
-        self.sep_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+
         sep_layout = QVBoxLayout()
         sep_layout.setSpacing(5)
         sep_layout.setContentsMargins(8, 8, 8, 8)
 
-        self.sep_underscore = QRadioButton(self.parent.tr("filename_separator_underscore"))
-        self.sep_space = QRadioButton(self.parent.tr("filename_separator_space"))
-        self.sep_none = QRadioButton(self.parent.tr("filename_separator_none"))
+        self.sep_underscore = QRadioButton(
+            self.parent.tr("filename_separator_underscore")
+        )
+        self.sep_space = QRadioButton(
+            self.parent.tr("filename_separator_space")
+        )
+        self.sep_none = QRadioButton(
+            self.parent.tr("filename_separator_none")
+        )
 
         if self.separator == "_":
             self.sep_underscore.setChecked(True)
@@ -2446,36 +2875,53 @@ class FilenameSettingsDialog(QDialog):
         sep_layout.addWidget(self.sep_underscore)
         sep_layout.addWidget(self.sep_space)
         sep_layout.addWidget(self.sep_none)
-        self.sep_group.setLayout(sep_layout)
-        left_layout.addWidget(self.sep_group)
 
+        self.sep_group.setLayout(sep_layout)
+
+        left_layout.addWidget(self.sep_group)
         left_layout.addStretch()
+
         options_layout.addWidget(left_widget, 1)
 
-        # Rechte Spalte: Verhalten bei Änderungen + Backup
+        # ================= Rechte Seite =================
+
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
         right_layout.setSpacing(10)
 
-        # Verhalten bei Änderungen - kompakter
         behavior_widget = QWidget()
         behavior_layout = QVBoxLayout(behavior_widget)
         behavior_layout.setContentsMargins(0, 0, 0, 0)
-        behavior_layout.setSpacing(5)
 
-        title_label = QLabel(self.parent.tr("behavior_section").replace("\n", "<br>"))
-        title_label.setTextFormat(Qt.RichText)
-        title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-        behavior_layout.addWidget(title_label)
+        behavior_title = QLabel(
+            self.parent.tr("behavior_section").replace("\n", "<br>")
+        )
+        behavior_title.setTextFormat(Qt.RichText)
+
+        section_font = QFont(dialog_font)
+        section_font.setPointSize(12)
+        section_font.setBold(True)
+
+        behavior_title.setFont(section_font)
+
+        behavior_layout.addWidget(behavior_title)
 
         content_frame = QFrame()
         content_frame.setFrameShape(QFrame.StyledPanel)
-        content_frame.setStyleSheet("border: 1px solid #555; border-radius: 4px; padding: 6px;")
-        content_layout_frame = QVBoxLayout(content_frame)
-        content_layout_frame.setSpacing(5)
+        content_frame.setStyleSheet("""
+            border:1px solid #555;
+            border-radius:4px;
+            padding:6px;
+        """)
 
-        self.rb_new_file = QRadioButton(self.parent.tr("behavior_new_file"))
-        self.rb_overwrite = QRadioButton(self.parent.tr("behavior_overwrite"))
+        frame_layout = QVBoxLayout(content_frame)
+
+        self.rb_new_file = QRadioButton(
+            self.parent.tr("behavior_new_file")
+        )
+        self.rb_overwrite = QRadioButton(
+            self.parent.tr("behavior_overwrite")
+        )
 
         if self.behavior == "new_file":
             self.rb_new_file.setChecked(True)
@@ -2484,52 +2930,73 @@ class FilenameSettingsDialog(QDialog):
 
         self.rb_new_file.toggled.connect(self.on_behavior_changed)
         self.rb_overwrite.toggled.connect(self.on_behavior_changed)
-        content_layout_frame.addWidget(self.rb_new_file)
-        content_layout_frame.addWidget(self.rb_overwrite)
+
+        frame_layout.addWidget(self.rb_new_file)
+        frame_layout.addWidget(self.rb_overwrite)
 
         info_label = QLabel(self.parent.tr("behavior_info"))
         info_label.setWordWrap(True)
-        info_label.setStyleSheet("color: #AAAAAA; font-style: italic; font-size: 11px; margin-left: 20px;")
-        content_layout_frame.addWidget(info_label)
+
+        info_font = QFont(dialog_font)
+        info_font.setPointSize(10)
+        info_font.setItalic(True)
+        info_label.setFont(info_font)
+        info_label.setStyleSheet("color:#AAAAAA;margin-left:20px;")
+
+        frame_layout.addWidget(info_label)
 
         behavior_layout.addWidget(content_frame)
         right_layout.addWidget(behavior_widget)
 
-        # Backup-Checkbox
         self.backup_cb = QCheckBox(self.parent.tr("settings_backup"))
         self.backup_cb.setChecked(self.create_backup)
-        self.backup_cb.setStyleSheet("font-size: 12px;")
-        right_layout.addWidget(self.backup_cb)
 
+        right_layout.addWidget(self.backup_cb)
         right_layout.addStretch()
+
         options_layout.addWidget(right_widget, 1)
 
         content_layout.addWidget(options_widget)
 
-        # Vorschau-Gruppe - kompakter
-        preview_group = QGroupBox(self.parent.tr("filename_preview_label"))
-        preview_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
+        # ================= Vorschau =================
+
+        preview_group = QGroupBox(
+            self.parent.tr("filename_preview_label")
+        )
+
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(8, 8, 8, 8)
 
         self.preview_label = QLabel()
-        self.preview_label.setFont(QFont("Monospace", 12))
-        self.preview_label.setStyleSheet("background-color: #3A3A4A; padding: 6px; border-radius: 4px;")
+
+        preview_font = QFontDatabase.systemFont(
+            QFontDatabase.FixedFont
+        )
+        preview_font.setPointSize(11)
+
+        self.preview_label.setFont(preview_font)
+        self.preview_label.setStyleSheet("""
+            background:#3A3A4A;
+            padding:6px;
+            border-radius:4px;
+        """)
         self.preview_label.setWordWrap(True)
         self.preview_label.setMinimumHeight(30)
+
         preview_layout.addWidget(self.preview_label)
         preview_group.setLayout(preview_layout)
-        content_layout.addWidget(preview_group)
 
-        # Weniger Platz am Ende
+        content_layout.addWidget(preview_group)
         content_layout.addStretch()
 
         scroll_area.setWidget(content_widget)
         main_layout.addWidget(scroll_area, 1)
 
-        # ========== 3. Fussbereich (Buttons) – IMMER SICHTBAR ==========
+        # ================= Buttons =================
+
         btn_widget = QWidget()
-        btn_widget.setMaximumHeight(60)  # Begrenzung der Button-Höhe
+        btn_widget.setMaximumHeight(60)
+
         btn_layout = QHBoxLayout(btn_widget)
         btn_layout.setContentsMargins(0, 8, 0, 8)
         btn_layout.setSpacing(10)
@@ -2548,11 +3015,9 @@ class FilenameSettingsDialog(QDialog):
 
         main_layout.addWidget(btn_widget)
 
-        # Focus für Tastatursteuerung
         cancel_btn.setFocusPolicy(Qt.StrongFocus)
         ok_btn.setFocusPolicy(Qt.StrongFocus)
 
-        # Initialer Aufruf
         self.on_behavior_changed()
 
     def load_settings(self):
@@ -12356,6 +12821,7 @@ class BookmarkManagerDialog(QDialog):
 class DeletePagesDialog(QDialog):
     def __init__(self, total_pages, parent=None):
         super().__init__(parent)
+        self.installEventFilter(self)
         self.total_pages = total_pages
         self.parent = parent
 
@@ -12370,147 +12836,94 @@ class DeletePagesDialog(QDialog):
 
     def init_ui(self):
         self.setWindowTitle("PDFDarkView by BinhDiez - " + self.lang.tr("pages_delete"))
-        self.setMinimumWidth(450)
-        self.setMinimumHeight(500)  # etwas mehr Höhe wegen neuer Optionen
+        self.setMinimumWidth(500)
+        self.setMinimumHeight(500)
 
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(10, 5, 10, 10)
+        main_layout.setContentsMargins(15, 10, 15, 10)
         self.setLayout(main_layout)
 
-        # Kopfzeile (unverändert) …
+        # Kopfzeile (unverändert)
         header = QWidget()
         header_layout = QHBoxLayout(header)
-        header_layout.setContentsMargins(0, 0, 0, 15)
-        header_layout.setSpacing(10)
+        header_layout.setContentsMargins(0, 0, 0, 10)
         header_layout.addStretch(1)
         if os.path.exists(Config.IMAGE_PATH):
             self.logo_label = QLabel()
-            logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
-                80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+            logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.logo_label.setPixmap(logo_pixmap)
-            self.logo_label.setAlignment(Qt.AlignVCenter)
             header_layout.addWidget(self.logo_label)
             header_layout.addStretch(1)
         self.title_label = QLabel(self.lang.tr("pages_delete"))
-        self.title_label.setStyleSheet("""
-            QLabel {
-                color: white;
-                font-size: 20px;
-                font-weight: bold;
-                padding: 5px;
-            }
-        """)
+        self.title_label.setStyleSheet("color: white; font-size: 20px; font-weight: bold;")
         self.title_label.setAlignment(Qt.AlignCenter)
         header_layout.addWidget(self.title_label)
         header_layout.addStretch(1)
         if os.path.exists(Config.APP_ICON_PATH):
             self.icon_label = QLabel()
-            icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
-                50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
-            )
+            icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation)
             self.icon_label.setPixmap(icon_pixmap)
-            self.icon_label.setAlignment(Qt.AlignVCenter)
             header_layout.addWidget(self.icon_label)
         header_layout.addStretch(1)
         main_layout.addWidget(header)
 
-        # Optionen Gruppe
-        self.option_group = QGroupBox(self.lang.tr("pages_delete_options"))
-        self.option_group.setStyleSheet("""
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-        option_layout = QVBoxLayout()
+        # === Radio-Buttons (ohne Bereich) ===
 
-        self.empty_pages_radio = QRadioButton(self.lang.tr("pages_delete_empty"))
-        self.empty_pages_radio.setStyleSheet("font-size: 14px;")
+        # RadioButton aktive Seite
         self.current_page_radio = QRadioButton(self.lang.tr("pages_delete_current"))
-        self.current_page_radio.setStyleSheet("font-size: 14px;")
-        self.range_radio = QRadioButton(self.lang.tr("pages_delete_range"))
-        self.range_radio.setStyleSheet("font-size: 14px;")
-        # Neue Optionen
+        self.current_page_radio.setStyleSheet("font-size: 14px; padding: 5px;")
+        # RadioButton gerade Seiten
         self.even_pages_radio = QRadioButton(self.lang.tr("pages_delete_even"))
-        self.even_pages_radio.setStyleSheet("font-size: 14px;")
+        self.even_pages_radio.setStyleSheet("font-size: 14px; padding: 5px;")
+        # RadioButton ungerade Seiten
         self.odd_pages_radio = QRadioButton(self.lang.tr("pages_delete_odd"))
-        self.odd_pages_radio.setStyleSheet("font-size: 14px;")
+        self.odd_pages_radio.setStyleSheet("font-size: 14px; padding: 5px;")
+        # RadioButton leere Seiten
+        self.empty_pages_radio = QRadioButton(self.lang.tr("pages_delete_empty"))
+        self.empty_pages_radio.setStyleSheet("font-size: 14px; padding: 5px;")
+        # ersten Button aktivieren
+        self.current_page_radio.setChecked(True)
 
-        # Standardmäßig erste Option aktivieren
-        self.empty_pages_radio.setChecked(True)
+        # === Bereichszeile: Checkbox + Spinboxen in einer Zeile ===
+        self.range_checkbox = QCheckBox(self.lang.tr("pages_delete_range"))
+        self.range_checkbox.setStyleSheet("font-size: 14px; padding: 5px;")
+        self.range_checkbox.setChecked(False)
 
-        option_layout.addWidget(self.empty_pages_radio)
-        option_layout.addSpacing(10)
-        option_layout.addWidget(self.current_page_radio)
-        option_layout.addSpacing(10)
-        option_layout.addWidget(self.range_radio)
-        option_layout.addSpacing(10)
-        option_layout.addWidget(self.even_pages_radio)
-        option_layout.addSpacing(10)
-        option_layout.addWidget(self.odd_pages_radio)
-
-        self.option_group.setLayout(option_layout)
-        main_layout.addWidget(self.option_group)
-
-        # Bereichseingabe (unverändert)
-        self.range_group = QGroupBox(self.lang.tr("pages_delete_range"))
-        self.range_group.setStyleSheet("""
-            QGroupBox {
-                font-size: 14px;
-                font-weight: bold;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px 0 5px;
-            }
-        """)
-        range_layout = QHBoxLayout()
         self.from_spin = QSpinBox()
         self.from_spin.setRange(1, self.total_pages)
         self.from_spin.setValue(1)
-        self.from_spin.setEnabled(True)
-        self.from_spin.setFocusPolicy(Qt.StrongFocus)
-        self.from_spin.setStyleSheet("font-size: 14px;")
+        self.from_spin.setEnabled(False)   # initial deaktiviert
+        self.from_spin.setStyleSheet("font-size: 14px; padding: 5px;")
         self.to_spin = QSpinBox()
         self.to_spin.setRange(1, self.total_pages)
-        if self.total_pages > 1:
-            self.to_spin.setValue(self.total_pages - 1)
-        else:
-            self.to_spin.setValue(1)
-        self.to_spin.setEnabled(True)
-        self.to_spin.setFocusPolicy(Qt.StrongFocus)
-        self.to_spin.setStyleSheet("font-size: 14px;")
-        from_label = QLabel(self.lang.tr("pages_move_from") + ":")
-        from_label.setStyleSheet("font-size: 14px;")
-        to_label = QLabel(self.lang.tr("pages_move_to") + ":")
-        to_label.setStyleSheet("font-size: 14px;")
-        range_layout.addWidget(from_label)
+        self.to_spin.setValue(self.total_pages if self.total_pages > 1 else 1)
+        self.to_spin.setEnabled(False)
+        self.to_spin.setStyleSheet("font-size: 14px; padding: 5px;")
+
+        # Horizontales Layout für die Bereichszeile
+        range_widget = QWidget()
+        range_layout = QHBoxLayout(range_widget)
+        range_layout.setContentsMargins(0, 0, 0, 0)
+        range_layout.setSpacing(10)
+        range_layout.addWidget(self.range_checkbox)
+        range_layout.addWidget(QLabel(self.lang.tr("pages_move_from") + ":"))
         range_layout.addWidget(self.from_spin)
-        range_layout.addWidget(to_label)
+        range_layout.addWidget(QLabel(self.lang.tr("pages_move_to") + ":"))
         range_layout.addWidget(self.to_spin)
-        self.range_group.setLayout(range_layout)
-        main_layout.addWidget(self.range_group)
-        self.range_group.setEnabled(False)
+        range_layout.addStretch()
+        range_widget.setStyleSheet("background-color: transparent;")  # optional
 
-        # Bereichsprüfung
-        self.to_spin.valueChanged.connect(self.check_range)
-        self.from_spin.valueChanged.connect(self.check_range)
+        # Widgets in der gewünschten Reihenfolge hinzufügen
+        main_layout.addWidget(self.current_page_radio)     # 1
+        main_layout.addWidget(self.even_pages_radio)       # 2
+        main_layout.addWidget(self.odd_pages_radio)        # 3
+        main_layout.addWidget(self.empty_pages_radio)      # 4
+        main_layout.addWidget(range_widget)                # 5 – Bereich in einer Zeile
 
-        # Buttons (unverändert)
+        # === Buttons ===
         button_box = QDialogButtonBox()
-        self.btn_cancel = button_box.addButton(
-            self.lang.tr("btn_cancel"), QDialogButtonBox.RejectRole
-        )
-        self.btn_okay = button_box.addButton(
-            self.lang.tr("btn_delete_pages"), QDialogButtonBox.AcceptRole
-        )
+        self.btn_cancel = button_box.addButton(self.lang.tr("btn_cancel"), QDialogButtonBox.RejectRole)
+        self.btn_okay = button_box.addButton(self.lang.tr("btn_delete_pages"), QDialogButtonBox.AcceptRole)
         self.parent.style_button(self.btn_cancel, "danger", (120, 25))
         self.parent.style_button(self.btn_okay, "primary", (120, 25))
         self.btn_cancel.setFocusPolicy(Qt.StrongFocus)
@@ -12520,45 +12933,94 @@ class DeletePagesDialog(QDialog):
         # Signale
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_okay.clicked.connect(self.validate)
-        self.range_radio.toggled.connect(self.toggle_range_group)
+        self.range_checkbox.toggled.connect(self.toggle_range_group)
 
-        # Neue Optionen fokussierbar machen
-        self.even_pages_radio.setFocusPolicy(Qt.StrongFocus)
-        self.odd_pages_radio.setFocusPolicy(Qt.StrongFocus)
-        self.empty_pages_radio.setFocusPolicy(Qt.StrongFocus)
-        self.current_page_radio.setFocusPolicy(Qt.StrongFocus)
-        self.range_radio.setFocusPolicy(Qt.StrongFocus)
+        # Bereichsprüfung
+        self.to_spin.valueChanged.connect(self.check_range)
+        self.from_spin.valueChanged.connect(self.check_range)
+
+        # Fokus für alle Widgets
+        for widget in (self.empty_pages_radio, self.current_page_radio, self.even_pages_radio,
+                    self.odd_pages_radio, self.range_checkbox, self.from_spin, self.to_spin):
+            widget.setFocusPolicy(Qt.StrongFocus)
+
+        self.setup_keyboard_navigation()
+        self.installEventFilter(self)
+
+    def toggle_range_group(self, checked):
+        # Spinboxen aktivieren/deaktivieren
+        self.from_spin.setEnabled(checked)
+        self.to_spin.setEnabled(checked)
+
+        # Radio-Buttons deaktivieren/aktivieren
+        self.empty_pages_radio.setEnabled(not checked)
+        self.current_page_radio.setEnabled(not checked)
+        self.even_pages_radio.setEnabled(not checked)
+        self.odd_pages_radio.setEnabled(not checked)
+
+        if checked:
+            self.empty_pages_radio.setChecked(False)
+            self.current_page_radio.setChecked(False)
+            self.even_pages_radio.setChecked(False)
+            self.odd_pages_radio.setChecked(False)
+        else:
+            # Wenn kein Radio ausgewählt ist, setze Standard auf "leere Seiten"
+            if not any([self.empty_pages_radio.isChecked(),
+                        self.current_page_radio.isChecked(),
+                        self.even_pages_radio.isChecked(),
+                        self.odd_pages_radio.isChecked()]):
+                self.empty_pages_radio.setChecked(True)
+
+    def get_selection(self):
+        if self.range_checkbox.isChecked():
+            return ("range", self.from_spin.value(), self.to_spin.value())
+        elif self.empty_pages_radio.isChecked():
+            return "empty"
+        elif self.current_page_radio.isChecked():
+            return "current"
+        elif self.even_pages_radio.isChecked():
+            return "even"
+        elif self.odd_pages_radio.isChecked():
+            return "odd"
+        return None
 
     def setup_keyboard_navigation(self):
-        """Richtet Tastatursteuerung ein – erweitert um even/odd."""
         self.escape_shortcut = QShortcut(QKeySequence("Esc"), self)
-        self.escape_shortcut.activated.connect(self.reject)
+        # Alten Shortcut entfernen (oder weglassen)
+        # self.escape_shortcut = QShortcut(QKeySequence("Esc"), self)
+        # self.escape_shortcut.activated.connect(self.reject)
 
-        # Reihenfolge: empty → current → range → even → odd → from_spin → to_spin → cancel → okay
+        # Stattdessen QAction
+        escape_action = QAction(self)
+        escape_action.setShortcut(QKeySequence("Esc"))
+        escape_action.triggered.connect(self.reject)
+        self.addAction(escape_action)
+
         self.setTabOrder(self.empty_pages_radio, self.current_page_radio)
-        self.setTabOrder(self.current_page_radio, self.range_radio)
-        self.setTabOrder(self.range_radio, self.even_pages_radio)
+        self.setTabOrder(self.current_page_radio, self.even_pages_radio)
         self.setTabOrder(self.even_pages_radio, self.odd_pages_radio)
-        self.setTabOrder(self.odd_pages_radio, self.from_spin)
+        self.setTabOrder(self.odd_pages_radio, self.empty_pages_radio)
+        self.setTabOrder(self.empty_pages_radio, self.range_checkbox)   # jetzt direkt danach
+        self.setTabOrder(self.range_checkbox, self.from_spin)         # von → bis
         self.setTabOrder(self.from_spin, self.to_spin)
         self.setTabOrder(self.to_spin, self.btn_cancel)
         self.setTabOrder(self.btn_cancel, self.btn_okay)
-        self.setTabOrder(self.btn_okay, self.empty_pages_radio)  # zyklisch
+        self.setTabOrder(self.btn_okay, self.empty_pages_radio)
 
-        # Fokus-Style für Buttons (unverändert)
         for btn in [self.btn_cancel, self.btn_okay]:
             current_style = btn.styleSheet()
             if "QPushButton:focus" not in current_style:
-                focus_style = """
-                    QPushButton:focus {
-                        border: 2px solid white !important;
-                        border-radius: 8px !important;
-                    }
-                """
+                focus_style = "QPushButton:focus { border: 2px solid white !important; border-radius: 8px !important; }"
                 btn.setStyleSheet(current_style + focus_style)
 
     def keyPressEvent(self, event):
-        """Tastaturnavigation – erweitert um even/odd."""
+        # 1. Escape immer abfangen
+        if event.key() == Qt.Key_Escape:
+            self.reject()
+            event.accept()
+            return
+
+        # 2. Pfeiltasten links/rechts für Button-Navigation
         if event.key() == Qt.Key_Left:
             current = self.focusWidget()
             if current == self.btn_okay:
@@ -12579,14 +13041,16 @@ class DeletePagesDialog(QDialog):
                 self.btn_cancel.setFocus()
                 event.accept()
                 return
+
+        # 3. Tab / Backtab (Ihre bestehende Logik)
         elif event.key() == Qt.Key_Tab:
             current = self.focusWidget()
             widget_order = [
                 self.empty_pages_radio,
                 self.current_page_radio,
-                self.range_radio,
                 self.even_pages_radio,
                 self.odd_pages_radio,
+                self.range_checkbox,
                 self.from_spin,
                 self.to_spin,
                 self.btn_cancel,
@@ -12605,9 +13069,9 @@ class DeletePagesDialog(QDialog):
             widget_order = [
                 self.empty_pages_radio,
                 self.current_page_radio,
-                self.range_radio,
                 self.even_pages_radio,
                 self.odd_pages_radio,
+                self.range_checkbox,
                 self.from_spin,
                 self.to_spin,
                 self.btn_cancel,
@@ -12621,6 +13085,8 @@ class DeletePagesDialog(QDialog):
                 return
             except (ValueError, AttributeError):
                 pass
+
+        # 4. Enter / Return (für Buttons oder Spinboxen)
         elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
             current = self.focusWidget()
             if current == self.btn_okay:
@@ -12635,6 +13101,8 @@ class DeletePagesDialog(QDialog):
                 self.validate()
                 event.accept()
                 return
+
+        # 5. Alle anderen Tasten an die Basisklasse weiterleiten
         super().keyPressEvent(event)
 
     def showEvent(self, event):
@@ -12644,14 +13112,14 @@ class DeletePagesDialog(QDialog):
         )
         QTimer.singleShot(100, self.set_initial_focus)
 
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.KeyPress and event.key() == Qt.Key_Escape:
+            self.reject()          # Dialog schließen
+            return True            # Ereignis verbraucht
+        return super().eventFilter(obj, event)
+
     def set_initial_focus(self):
         self.empty_pages_radio.setFocus()
-
-    def toggle_range_group(self, checked):
-        self.range_group.setEnabled(checked)
-        if checked:
-            self.from_spin.setFocus()
-            self.say(self.lang.tr("pages_delete_range"))
 
     def say(self, message, force=False, convert_numbers=False):
         if self.parent and hasattr(self.parent, "say"):
@@ -12750,18 +13218,6 @@ class DeletePagesDialog(QDialog):
                 self.to_spin.blockSignals(False)
                 self.say(self.lang.tr("pages_cannot_delete_all"))
 
-    def get_selection(self):
-        if self.empty_pages_radio.isChecked():
-            return "empty"
-        elif self.current_page_radio.isChecked():
-            return "current"
-        elif self.range_radio.isChecked():
-            return ("range", self.from_spin.value(), self.to_spin.value())
-        elif self.even_pages_radio.isChecked():
-            return "even"
-        elif self.odd_pages_radio.isChecked():
-            return "odd"
-        return None
 
 
 class DeletePagesWorker(QThread):
@@ -62013,6 +62469,8 @@ def main():
 
     # PyQt5 App starten
     app_start = time.time()
+    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
+    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
     app = QApplication(sys.argv)
 
     app.setApplicationName("PDF Dark View")
