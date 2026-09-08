@@ -1,5 +1,3 @@
-## PDFDarkView - PDF Bearbeitung leicht gemacht (kostenlos)
-
 # PDFDarkView – PDF Editing Made Easy (Open Source)
 
 <p align="left">
@@ -485,7 +483,7 @@ Insbesondere im Netzwerk- und Citrix-Betrieb wurde die Startzeit erheblich verk�
 ---
 
 <details>
-<summary>📸 Screenshots anzeigen</summary>
+<summary>📸 Screenshots</summary>
 
 ### PDF Bearbeiten / Einfügen (Dark Mode / Light Mode)
 
@@ -569,30 +567,6 @@ Chi tiết xem trong `THIRD_PARTY_LICENSES.md`.
 ---
 
 <details>
-<summary>🖥️ Download-Info</summary>
-
-### Download-Versionen
-
-| Suffix | Betriebssystem |
-|--------|-----------------|
-| `_macOS_as` | Apple Silicon (M1–M4) |
-| `_macOS_intel` | Intel Macs |
-| `_win` | Windows x64 |
-
-> Windows on ARM wird derzeit nicht unterstützt.
-
-### 7Z-Archive entpacken
-
-| Betriebssystem | Empfohlene App |
-|---------------|----------------|
-| 🍎 macOS | **Keka** – <https://www.keka.io/> |
-| 🪟 Windows | **7-Zip** – <https://www.7-zip.org/> |
-
-</details>
-
----
-
-<details>
 <summary>🔒 macOS-Sicherheitshinweis</summary>
 
 ### 🇩🇪 Deutsch
@@ -637,6 +611,30 @@ Khi khởi động ứng dụng lần đầu tiên, macOS Gatekeeper có thể c
 
 </details>
 
+
+---
+
+<details>
+<summary>🖥️ Download-Info</summary>
+
+### Download-Versionen
+
+| Suffix | Betriebssystem |
+|--------|-----------------|
+| `_macOS_as` | Apple Silicon (M1–M4) |
+| `_macOS_intel` | Intel Macs |
+| `_win` | Windows x64 |
+
+> Windows on ARM wird derzeit nicht unterstützt / not supported
+
+### 7z-Archive entpacken / extracting
+
+| Betriebssystem | Empfohlene App |
+|---------------|----------------|
+| 🍎 macOS | **Keka** – <https://www.keka.io/> |
+| 🪟 Windows | **7-Zip** – <https://www.7-zip.org/> |
+
+</details>
 ---
 
 <details>
