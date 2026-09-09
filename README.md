@@ -369,7 +369,7 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 ---
 
 <details>
-<summary>🔄 Versionsverlauf / Change Log</summary>
+<summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
 ## Version 2.4.5
 
@@ -470,7 +470,7 @@ Insbesondere im Netzwerk- und Citrix-Betrieb wurde die Startzeit erheblich verk�
 ---
 
 <details>
-<summary>🖥️ Unterstützte Plattformen</summary>
+<summary>🖥️ Unterstützte Plattformen / Supported platforms / Các nền tảng được hỗ trợ</summary>
 # Unterstützte Plattformen
 
 | Plattform | Unterstützung |
@@ -483,7 +483,7 @@ Insbesondere im Netzwerk- und Citrix-Betrieb wurde die Startzeit erheblich verk�
 ---
 
 <details>
-<summary>📸 Screenshots</summary>
+<summary>📸 Screenshots / Ảnh chụp màn hình </summary>
 
 ### PDF Bearbeiten / Einfügen (Dark Mode / Light Mode)
 
@@ -567,7 +567,7 @@ Chi tiết xem trong `THIRD_PARTY_LICENSES.md`.
 ---
 
 <details>
-<summary>🔒 macOS-Sicherheitshinweis</summary>
+<summary>🔒 macOS-Sicherheitshinweis / Gatekeeper Info / Thông báo bảo mật macOS</summary>
 
 ### 🇩🇪 Deutsch
 PDFDarkView ist derzeit nicht mit einem Apple-Developer-Zertifikat signiert.
@@ -615,9 +615,9 @@ Khi khởi động ứng dụng lần đầu tiên, macOS Gatekeeper có thể c
 ---
 
 <details>
-<summary>🖥️ Download-Info</summary>
+<summary>🖥️ Download-Info / Thông tin tải xuống </summary>
 
-### Download-Versionen
+### Download-Versione
 
 | Suffix | Betriebssystem |
 |--------|-----------------|
@@ -627,7 +627,7 @@ Khi khởi động ứng dụng lần đầu tiên, macOS Gatekeeper có thể c
 
 > Windows on ARM wird derzeit nicht unterstützt / not supported
 
-### 7z-Archive entpacken / extracting
+### Extract 7z-Archive / Giải nén các tệp lưu trữ 7z
 
 | Betriebssystem | Empfohlene App |
 |---------------|----------------|
@@ -635,10 +635,10 @@ Khi khởi động ứng dụng lần đầu tiên, macOS Gatekeeper có thể c
 | 🪟 Windows | **7-Zip** – <https://www.7-zip.org/> |
 
 </details>
----
+
 
 <details>
-<summary>🔑 Passwort für die ZIP-Dateien</summary>
+<summary>🔑 7z Passwort / password / mật khẩu</summary>
 
 **BinhDiez**
 
