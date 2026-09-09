@@ -584,6 +584,7 @@ Beim ersten Start kann macOS Gatekeeper die Ausführung blockieren.
 ### Alternativ das Quarantine Attribut entfernen:
 
 🍎 macOS Terminal
+
 xattr -d com.apple.quarantine '/Users/username/Downloads/PDFDarkView.app'
 
 > Den Pfad zur Datei bitte anpassen.
@@ -605,6 +606,7 @@ When starting the app for the first time, macOS Gatekeeper may block the app fro
 ### Alternatively, remove the quarantine attribute:
 
 🍎 macOS Terminal
+
 xattr -d com.apple.quarantine '/Users/username/Downloads/PDFDarkView.app'
 
 > Please adjust the file path accordingly.
@@ -626,6 +628,7 @@ Khi khởi động ứng dụng lần đầu tiên, macOS Gatekeeper có thể c
 ### Hoặc xóa thuộc tính Quarantine:
 
 🍎 Terminal trên macOS
+
 xattr -d com.apple.quarantine '/Users/username/Downloads/PDFDarkView.app'
 
 > Vui lòng điều chỉnh đường dẫn đến tệp cho phù hợp.
