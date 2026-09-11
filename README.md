@@ -527,7 +527,7 @@ Copy the desired `translations_Suffix.py` file into the `translations` folder of
 Các tệp từ điển sau đây có sẵn và có thể được tải xuống từ kho lưu trữ này.
 Sao chép tệp `translations_Suffix.py` mong muốn vào thư mục `translations` của PDFDarkView. Khởi động lại PDFDarkView và chọn ngôn ngữ mong muốn trong cài đặt.
 
-| Suffix | Flagge + Name / Flag + Name / Cờ &+Tên | deutscher Name / German name / tên tiếng Đức | Land oder Region / Country or region / quốc gia hoặc khu vực | geschätzte Zahl der Sprecher / estimated number of speakers / số người nói ước tính |
+| Suffix | Flagge + Name / Flag  + Name / Cờ + Tên | deutscher Name / German name / tên tiếng Đức | Land oder Region / Country or region / quốc gia hoặc khu vực | geschätzte Zahl der Sprecher / estimated number of speakers / số người nói ước tính |
 |--------|------------------------------------------|-----------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------------------------------------------|
 | af | 🇿🇦 Afrikaans | Afrikaans | Südafrika | ca. 7.400.000 |
 | ar | 🇸🇦 العربية | Arabisch | Saudi-Arabien | ca. 335.000.000 |
