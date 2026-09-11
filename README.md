@@ -513,6 +513,94 @@ Insbesondere im Netzwerk- und Citrix-Betrieb wurde die Startzeit erheblich verk�
 
 
 <details>
+<summary>🌐 verfügbare GUI Sprachen / available GUI languages / GUI ngôn ngữ</summary>
+
+**🇩🇪 Deutsch:**
+Folgende Wörterbuchdateien stehen zur Verfügung und können in diesem Repository heruntergeladen werden.
+Kopieren Sie die gewünschte `translations_Suffix.py` Datei in den `translations` Ordner von PDFDarkView. Starten Sie PDFDarkView erneut und wählen Sie in den Einstellungen die gewünschte Sprache aus.
+
+**🇬🇧 English:**
+The following dictionary files are available and can be downloaded from this repository.
+Copy the desired `translations_Suffix.py` file into the `translations` folder of PDFDarkView. Restart PDFDarkView and select the desired language in the settings.
+
+**🇻🇳 Tiếng Việt:**
+Các tệp từ điển sau đây có sẵn và có thể được tải xuống từ kho lưu trữ này.
+Sao chép tệp `translations_Suffix.py` mong muốn vào thư mục `translations` của PDFDarkView. Khởi động lại PDFDarkView và chọn ngôn ngữ mong muốn trong cài đặt.
+
+| Suffix | Flagge & Name / Flag & Name / Cờ & Tên | deutscher Name / German name / tên tiếng Đức | Land oder Region / Country or region / quốc gia hoặc khu vực | geschätzte Zahl der Sprecher / estimated number of speakers / số người nói ước tính |
+|--------|------------------------------------------|-----------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------------------------------------------|
+
+| Suffix | Flagge Name | deutscher Name | Land oder Region | geschätzte Zahl der Sprecher |
+|--------|-------------|----------------|------------------|------------------------------|
+| af | 🇿🇦 Afrikaans | Afrikaans | Südafrika | ca. 7.400.000 |
+| ar | 🇸🇦 العربية | Arabisch | Saudi-Arabien | ca. 335.000.000 |
+| ban | 🇮🇩 Basa Bali | Balinesisch | Indonesien | ca. 3.300.000 |
+| bg | 🇧🇬 български | Bulgarisch | Bulgarien | ca. 7.000.000 |
+| bn | 🇧🇩 বাংলা | Bengalisch | Bangladesch | ca. 284.000.000 |
+| bs | 🇧🇦 bosanski | Bosnisch | Bosnien und Herzegowina | ca. 2.500.000 |
+| cs | 🇨🇿 čeština | Tschechisch | Tschechien | ca. 10.700.000 |
+| da | 🇩🇰 dansk | Dänisch | Dänemark | ca. 6.000.000 |
+| de | 🇩🇪 Deutsch | Deutsch | Deutschland | ca. 134.000.000 |
+| el | 🇬🇷 Ελληνικά | Griechisch | Griechenland | ca. 13.000.000 |
+| en | 🇬🇧 English | Englisch | Vereinigtes Königreich | ca. 1.528.000.000 |
+| eo | 🌍 Esperanto | Esperanto | keine Region | ca. 1.000.000 |
+| es | 🇪🇸 español | Spanisch | Spanien | ca. 558.000.000 |
+| et | 🇪🇪 eesti | Estnisch | Estland | ca. 1.100.000 |
+| fa | 🇮🇷 فارسی | Persisch | Iran | ca. 70.000.000 |
+| fi | 🇫🇮 suomi | Finnisch | Finnland | ca. 5.400.000 |
+| fr | 🇫🇷 français | Französisch | Frankreich | ca. 312.000.000 |
+| ga | 🇮🇪 Gaeilge | Irisch | Irland | ca. 170.000 |
+| he | 🇮🇱 עברית | Hebräisch | Israel | ca. 9.000.000 |
+| hi | 🇮🇳 हिन्दी | Hindi | Indien | ca. 609.000.000 |
+| hr | 🇭🇷 hrvatski | Kroatisch | Kroatien | ca. 5.600.000 |
+| hu | 🇭🇺 magyar | Ungarisch | Ungarn | ca. 13.000.000 |
+| id | 🇮🇩 Bahasa Indonesia | Indonesisch | Indonesien | ca. 252.000.000 |
+| is | 🇮🇸 íslenska | Isländisch | Island | ca. 350.000 |
+| it | 🇮🇹 italiano | Italienisch | Italien | ca. 68.000.000 |
+| ja | 🇯🇵 日本語 | Japanisch | Japan | ca. 126.000.000 |
+| km | 🇰🇭 ភាសាខ្មែរ | Khmer | Kambodscha | ca. 16.000.000 |
+| ko | 🇰🇷 한국어 | Koreanisch | Südkorea | ca. 77.000.000 |
+| lb | 🇱🇺 Lëtzebuergesch | Luxemburgisch | Luxemburg | ca. 600.000 |
+| lo | 🇱🇦 ພາສາລາວ | Laotisch | Laos | ca. 30.000.000 |
+| lt | 🇱🇹 lietuvių | Litauisch | Litauen | ca. 3.000.000 |
+| lv | 🇱🇻 latviešu | Lettisch | Lettland | ca. 1.500.000 |
+| mn | 🇲🇳 Монгол хэл | Mongolisch | Mongolei | ca. 5.700.000 |
+| mr | 🇮🇳 मराठी | Marathi | Indien | ca. 99.000.000 |
+| ms | 🇲🇾 Bahasa Melayu | Malaiisch | Malaysia | ca. 33.000.000 |
+| my | 🇲🇲 မြန်မာစာ | Birmanisch | Myanmar | ca. 33.000.000 |
+| ne | 🇳🇵 नेपाली | Nepalesisch | Nepal | ca. 17.000.000 |
+| nl | 🇳🇱 Nederlands | Niederländisch | Niederlande | ca. 24.000.000 |
+| no | 🇳🇴 norsk | Norwegisch | Norwegen | ca. 5.300.000 |
+| pa | 🇮🇳 ਪੰਜਾਬੀ | Punjabi | Indien | ca. 113.000.000 |
+| pl | 🇵🇱 polski | Polnisch | Polen | ca. 40.000.000 |
+| ps | 🇦🇫 پښتو | Paschtu | Afghanistan | ca. 50.000.000 |
+| pt | 🇵🇹 português | Portugiesisch | Portugal | ca. 267.000.000 |
+| ro | 🇷🇴 română | Rumänisch | Rumänien | ca. 24.000.000 |
+| ru | 🇷🇺 русский | Russisch | Russland | ca. 253.000.000 |
+| sk | 🇸🇰 slovenčina | Slowakisch | Slowakei | ca. 5.200.000 |
+| sl | 🇸🇮 slovenščina | Slowenisch | Slowenien | ca. 2.500.000 |
+| sq | 🇦🇱 Shqip | Albanisch | Albanien | ca. 7.500.000 |
+| sr | 🇷🇸 српски | Serbisch | Serbien | ca. 9.000.000 |
+| sv | 🇸🇪 svenska | Schwedisch | Schweden | ca. 10.000.000 |
+| sw | 🇹🇿 Kiswahili | Suaheli | Tansania | ca. 80.000.000 |
+| ta | 🇮🇳 தமிழ் | Tamil | Indien | ca. 86.000.000 |
+| te | 🇮🇳 తెలుగు | Telugu | Indien | ca. 96.000.000 |
+| th | 🇹🇭 ไทย | Thailändisch | Thailand | ca. 60.000.000 |
+| tl | 🇵🇭 Filipino | Tagalog | Philippinen | ca. 45.000.000 |
+| tr | 🇹🇷 Türkçe | Türkisch | Türkei | ca. 91.000.000 |
+| uk | 🇺🇦 українська | Ukrainisch | Ukraine | ca. 40.000.000 |
+| ur | 🇵🇰 اردو | Urdu | Pakistan | ca. 246.000.000 |
+| vi | 🇻🇳 Tiếng Việt | Vietnamesisch | Vietnam | ca. 97.000.000 |
+| wo | 🇸🇳 Wolof | Wolof | Senegal | ca. 5.000.000 |
+| yi | 🇮🇱 ייִדיש | Jiddisch | Israel | ca. 600.000 |
+| zh | 🇨🇳 中文 | Chinesisch | China | ca. 1.180.000.000 |
+| zu | 🇿🇦 isiZulu | Zulu | Südafrika | ca. 12.000.000 |
+
+</details>
+
+---
+
+<details>
 <summary>🔍 Suchbegriffe / Keywords / Từ khóa</summary>
 
 🇩🇪 Deutsch
