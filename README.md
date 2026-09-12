@@ -520,13 +520,19 @@ Insbesondere im Netzwerk- und Citrix-Betrieb wurde die Startzeit erheblich verk�
 Folgende Wörterbuchdateien stehen zur Verfügung und können in diesem Repository heruntergeladen werden.
 Kopieren Sie die gewünschte `translations_Suffix.py` Datei in den `translations` Ordner von PDFDarkView. Starten Sie PDFDarkView erneut und wählen Sie in den Einstellungen die gewünschte Sprache aus.
 
+Hinweis: Die Übersetzungen wurden mithilfe einer KI erstellt. Daher können sprachliche Ungenauigkeiten oder missverständliche Formulierungen vorkommen.
+
 **🇬🇧 English:**
 The following dictionary files are available and can be downloaded from this repository.
 Copy the desired `translations_Suffix.py` file into the `translations` folder of PDFDarkView. Restart PDFDarkView and select the desired language in the settings.
 
+Note: The translations were created with the help of AI. As a result, they may contain linguistic inaccuracies or unclear wording.
+
 **🇻🇳 Tiếng Việt:**
 Các tệp từ điển sau đây có sẵn và có thể được tải xuống từ kho lưu trữ này.
 Sao chép tệp `translations_Suffix.py` mong muốn vào thư mục `translations` của PDFDarkView. Khởi động lại PDFDarkView và chọn ngôn ngữ mong muốn trong cài đặt.
+
+>Lưu ý: Các bản dịch được tạo với sự hỗ trợ của AI. Vì vậy, có thể xuất hiện những điểm chưa chính xác về ngôn ngữ hoặc cách diễn đạt chưa rõ ràng.
 
 | Suffix | Flagge + Name  Flag + Name Cờ + Tên | deutscher Name / German name / tên tiếng Đức | Land oder Region / Country or region / quốc gia hoặc khu vực | geschätzte Zahl der Sprecher / estimated number of speakers / số người nói ước tính |
 |--------|------------------------------------------|-----------------------------------------------|----------------------------------------------------------------|------------------------------------------------------------------------------------------------|
