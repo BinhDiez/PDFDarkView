@@ -2182,379 +2182,6 @@ class FilenameSettingsDialog(QDialog):
         if self.width() > max_dialog_width:
             self.resize(max_dialog_width, self.height())
 
-    # def init_ui(self):
-    #     """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
-    #     # Hauptlayout (vertikal)
-    #     main_layout = QVBoxLayout(self)
-    #     main_layout.setContentsMargins(8, 8, 8, 8)  # Kleinere Ränder
-    #     main_layout.setSpacing(8)  # Weniger Abstand
-
-    #     # ========== 1. Kopfbereich (Header) – KEINE SCROLLAREA ==========
-    #     header = QWidget()
-    #     header_layout = QHBoxLayout(header)
-    #     header_layout.setContentsMargins(0, 0, 0, 15)
-    #     header_layout.setSpacing(10)
-
-    #     header_layout.addStretch(1)
-
-    #     if os.path.exists(Config.IMAGE_PATH):
-    #         self.logo_label = QLabel()
-    #         logo_pixmap = QPixmap(Config.IMAGE_PATH).scaled(
-    #             80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation
-    #         )
-    #         self.logo_label.setPixmap(logo_pixmap)
-    #         self.logo_label.setAlignment(Qt.AlignVCenter)
-    #         header_layout.addWidget(self.logo_label)
-    #         header_layout.addStretch(1)
-
-    #     self.title_label = QLabel(self.parent.tr("filename_settings_dialog_title"))
-    #     self.title_label.setStyleSheet("""
-    #         QLabel {
-    #             color: white;
-    #             font-size: 20px;
-    #             font-weight: bold;
-    #             padding: 5px;
-    #         }
-    #     """)
-    #     self.title_label.setAlignment(Qt.AlignCenter)
-    #     header_layout.addWidget(self.title_label)
-    #     header_layout.addStretch(1)
-
-    #     if os.path.exists(Config.APP_ICON_PATH):
-    #         self.icon_label = QLabel()
-    #         icon_pixmap = QPixmap(Config.APP_ICON_PATH).scaled(
-    #             50, 50, Qt.KeepAspectRatio, Qt.SmoothTransformation
-    #         )
-    #         self.icon_label.setPixmap(icon_pixmap)
-    #         self.icon_label.setAlignment(Qt.AlignVCenter)
-    #         header_layout.addWidget(self.icon_label)
-
-    #     header_layout.addStretch(1)
-    #     main_layout.addWidget(header)
-
-
-    #     # ========== 2. ScrollArea für den gesamten interaktiven Inhalt ==========
-    #     scroll_area = QScrollArea()
-    #     scroll_area.setWidgetResizable(True)
-    #     scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-    #     scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
-    #     scroll_area.setStyleSheet("""
-    #         QScrollArea {
-    #             border: none;
-    #             background-color: transparent;
-    #         }
-    #         QScrollBar:vertical {
-    #             background: #3D3D3D;
-    #             width: 14px;
-    #             margin: 0px;
-    #         }
-    #         QScrollBar::handle:vertical {
-    #             background: #AAAAAA;
-    #             min-height: 20px;
-    #             border-radius: 7px;
-    #         }
-    #         QScrollBar::handle:vertical:hover {
-    #             background: #CCCCCC;
-    #         }
-    #         QScrollBar::sub-line:vertical, QScrollBar::add-line:vertical {
-    #             height: 0px;
-    #         }
-    #     """)
-
-    #     # Container für den Inhalt der ScrollArea
-    #     content_widget = QWidget()
-    #     content_widget.setStyleSheet("background-color: #1E1E1E;")
-    #     content_layout = QVBoxLayout(content_widget)
-    #     content_layout.setContentsMargins(8, 8, 8, 8)
-    #     content_layout.setSpacing(12)
-
-    #     # ================= Zwei horizontale Bereiche (Optionen) =================
-    #     options_widget = QWidget()
-    #     options_layout = QHBoxLayout(options_widget)
-    #     options_layout.setSpacing(15)
-
-    #     # Linke Spalte: Formatierungsoptionen (Zeitstempel + Benutzername)
-    #     left_widget = QWidget()
-    #     left_layout = QVBoxLayout(left_widget)
-    #     left_layout.setSpacing(10)
-
-    #     # Zeitstempel Gruppe - kompakter
-    #     self.ts_group = QGroupBox(self.parent.tr("filename_use_timestamp"))
-    #     self.ts_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
-    #     ts_layout = QFormLayout()
-    #     ts_layout.setSpacing(5)
-    #     ts_layout.setContentsMargins(8, 8, 8, 8)
-
-    #     self.use_ts_cb = QCheckBox(self.parent.tr("filename_use_timestamp"))
-    #     self.use_ts_cb.setChecked(self.use_timestamp)
-    #     self.use_ts_cb.toggled.connect(self.update_preview)
-    #     ts_layout.addRow(self.use_ts_cb)
-
-    #     self.ts_format_combo = QComboBox()
-    #     now = datetime.now()
-    #     formats = [
-    #         ("%Y%m%d_%H%M%S", now.strftime("%Y%m%d_%H%M%S")),
-    #         ("%Y-%m-%d_%H%M%S", now.strftime("%Y-%m-%d_%H%M%S")),
-    #         ("%Y%m%d_%H%M", now.strftime("%Y%m%d_%H%M")),
-    #         ("%Y-%m-%d_%H%M", now.strftime("%Y-%m-%d_%H%M")),
-    #         ("%Y%m%d", now.strftime("%Y%m%d")),
-    #         ("%Y-%m-%d", now.strftime("%Y-%m-%d")),
-    #         ("%d.%m.%Y_%H%M%S", now.strftime("%d.%m.%Y_%H%M%S")),
-    #         ("%d.%m.%Y_%H%M", now.strftime("%d.%m.%Y_%H%M")),
-    #     ]
-    #     for fmt, example in formats:
-    #         self.ts_format_combo.addItem(example, fmt)
-    #     idx = self.ts_format_combo.findData(self.timestamp_format)
-    #     if idx >= 0:
-    #         self.ts_format_combo.setCurrentIndex(idx)
-    #     self.ts_format_combo.currentIndexChanged.connect(self.update_preview)
-    #     ts_layout.addRow(
-    #         self.parent.tr("filename_timestamp_format") + ":", self.ts_format_combo
-    #     )
-
-    #     self.ts_pos_combo = QComboBox()
-    #     self.ts_pos_combo.addItem(
-    #         self.parent.tr("filename_timestamp_position_before"), "before"
-    #     )
-    #     self.ts_pos_combo.addItem(
-    #         self.parent.tr("filename_timestamp_position_after"), "after"
-    #     )
-    #     self.ts_pos_combo.addItem(
-    #         self.parent.tr("filename_timestamp_position_end"), "end"
-    #     )
-    #     idx = self.ts_pos_combo.findData(self.timestamp_position)
-    #     if idx >= 0:
-    #         self.ts_pos_combo.setCurrentIndex(idx)
-    #     self.ts_pos_combo.currentIndexChanged.connect(self.update_preview)
-    #     ts_layout.addRow(
-    #         self.parent.tr("filename_timestamp_position") + ":", self.ts_pos_combo
-    #     )
-
-    #     self.ts_group.setLayout(ts_layout)
-    #     left_layout.addWidget(self.ts_group)
-
-    #     # Benutzername Gruppe - kompakter
-    #     username_group = QGroupBox(self.parent.tr("username_in_suffix"))
-    #     username_group.setStyleSheet("""
-    #         QGroupBox {
-    #             border: 1px solid #555;
-    #             border-radius: 4px;
-    #             margin-top: 3px;
-    #             padding-top: 8px;
-    #         }
-    #         QGroupBox::title {
-    #             subcontrol-origin: margin;
-    #             left: 10px;
-    #             padding: 0 5px;
-    #         }
-    #     """)
-    #     username_layout = QVBoxLayout()
-    #     username_layout.setSpacing(5)
-    #     username_layout.setContentsMargins(8, 8, 8, 8)
-
-    #     self.use_username_cb = QCheckBox(self.parent.tr("username_in_suffix_enable"))
-    #     self.use_username_cb.setChecked(self.use_username_in_suffix)
-    #     self.use_username_cb.toggled.connect(self.update_preview)
-    #     username_layout.addWidget(self.use_username_cb)
-
-    #     username_input_layout = QHBoxLayout()
-    #     username_input_layout.setSpacing(8)
-
-    #     username_label = QLabel(self.parent.tr("username_label"))
-    #     username_label.setStyleSheet("color: #FFFFFF; font-weight: bold;")
-    #     username_label.setMinimumWidth(80)
-
-    #     self.username_input = QLineEdit()
-    #     self.username_input.setText(self.username)
-    #     self.username_input.setPlaceholderText(self.parent.tr("username_placeholder"))
-    #     self.username_input.setStyleSheet("""
-    #         QLineEdit {
-    #             background-color: #2D2D2D;
-    #             border: 1px solid #666;
-    #             border-radius: 4px;
-    #             padding: 4px;
-    #             color: #FFFFFF;
-    #             font-size: 13px;
-    #         }
-    #         QLineEdit:focus {
-    #             border: 1px solid #197602;
-    #         }
-    #         QLineEdit:disabled {
-    #             background-color: #3D3D3D;
-    #             color: #888888;
-    #         }
-    #     """)
-    #     self.username_input.textChanged.connect(self.update_preview)
-    #     self.username_input.setEnabled(self.use_username_in_suffix)
-    #     self.use_username_cb.toggled.connect(self.username_input.setEnabled)
-
-    #     reset_username_btn = QPushButton(self.parent.tr("username_reset"))
-    #     reset_username_btn.setFixedWidth(70)
-    #     reset_username_btn.setStyleSheet("""
-    #         QPushButton {
-    #             background-color: #2D2D2D;
-    #             border: 1px solid #666;
-    #             border-radius: 4px;
-    #             color: white;
-    #             font-size: 11px;
-    #             padding: 3px 6px;
-    #         }
-    #         QPushButton:hover {
-    #             background-color: #3D3D3D;
-    #             border-color: #777;
-    #         }
-    #     """)
-    #     reset_username_btn.clicked.connect(self._reset_username_to_system)
-
-    #     username_input_layout.addWidget(username_label)
-    #     username_input_layout.addWidget(self.username_input, 1)
-    #     username_input_layout.addWidget(reset_username_btn)
-    #     username_layout.addLayout(username_input_layout)
-
-    #     # Hinweistext - kleiner und kompakter
-    #     hint_label = QLabel(self.parent.tr("username_hint"))
-    #     hint_label.setWordWrap(True)
-    #     hint_label.setStyleSheet("color: #AAAAAA; font-size: 10px; font-style: italic; margin-left: 8px;")
-    #     hint_label.setMinimumHeight(25)
-    #     username_layout.addWidget(hint_label)
-
-    #     username_group.setLayout(username_layout)
-    #     left_layout.addWidget(username_group)
-
-    #     # Trennzeichen Gruppe - kompakter
-    #     self.sep_group = QGroupBox(self.parent.tr("filename_separator"))
-    #     self.sep_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
-    #     sep_layout = QVBoxLayout()
-    #     sep_layout.setSpacing(5)
-    #     sep_layout.setContentsMargins(8, 8, 8, 8)
-
-    #     self.sep_underscore = QRadioButton(self.parent.tr("filename_separator_underscore"))
-    #     self.sep_space = QRadioButton(self.parent.tr("filename_separator_space"))
-    #     self.sep_none = QRadioButton(self.parent.tr("filename_separator_none"))
-
-    #     if self.separator == "_":
-    #         self.sep_underscore.setChecked(True)
-    #     elif self.separator == " ":
-    #         self.sep_space.setChecked(True)
-    #     else:
-    #         self.sep_none.setChecked(True)
-
-    #     self.sep_underscore.toggled.connect(self.update_preview)
-    #     self.sep_space.toggled.connect(self.update_preview)
-    #     self.sep_none.toggled.connect(self.update_preview)
-
-    #     sep_layout.addWidget(self.sep_underscore)
-    #     sep_layout.addWidget(self.sep_space)
-    #     sep_layout.addWidget(self.sep_none)
-    #     self.sep_group.setLayout(sep_layout)
-    #     left_layout.addWidget(self.sep_group)
-
-    #     left_layout.addStretch()
-    #     options_layout.addWidget(left_widget, 1)
-
-    #     # Rechte Spalte: Verhalten bei Änderungen + Backup
-    #     right_widget = QWidget()
-    #     right_layout = QVBoxLayout(right_widget)
-    #     right_layout.setSpacing(10)
-
-    #     # Verhalten bei Änderungen - kompakter
-    #     behavior_widget = QWidget()
-    #     behavior_layout = QVBoxLayout(behavior_widget)
-    #     behavior_layout.setContentsMargins(0, 0, 0, 0)
-    #     behavior_layout.setSpacing(5)
-
-    #     title_label = QLabel(self.parent.tr("behavior_section").replace("\n", "<br>"))
-    #     title_label.setTextFormat(Qt.RichText)
-    #     title_label.setStyleSheet("font-weight: bold; font-size: 13px;")
-    #     behavior_layout.addWidget(title_label)
-
-    #     content_frame = QFrame()
-    #     content_frame.setFrameShape(QFrame.StyledPanel)
-    #     content_frame.setStyleSheet("border: 1px solid #555; border-radius: 4px; padding: 6px;")
-    #     content_layout_frame = QVBoxLayout(content_frame)
-    #     content_layout_frame.setSpacing(5)
-
-    #     self.rb_new_file = QRadioButton(self.parent.tr("behavior_new_file"))
-    #     self.rb_overwrite = QRadioButton(self.parent.tr("behavior_overwrite"))
-
-    #     if self.behavior == "new_file":
-    #         self.rb_new_file.setChecked(True)
-    #     else:
-    #         self.rb_overwrite.setChecked(True)
-
-    #     self.rb_new_file.toggled.connect(self.on_behavior_changed)
-    #     self.rb_overwrite.toggled.connect(self.on_behavior_changed)
-    #     content_layout_frame.addWidget(self.rb_new_file)
-    #     content_layout_frame.addWidget(self.rb_overwrite)
-
-    #     info_label = QLabel(self.parent.tr("behavior_info"))
-    #     info_label.setWordWrap(True)
-    #     info_label.setStyleSheet("color: #AAAAAA; font-style: italic; font-size: 11px; margin-left: 20px;")
-    #     content_layout_frame.addWidget(info_label)
-
-    #     behavior_layout.addWidget(content_frame)
-    #     right_layout.addWidget(behavior_widget)
-
-    #     # Backup-Checkbox
-    #     self.backup_cb = QCheckBox(self.parent.tr("settings_backup"))
-    #     self.backup_cb.setChecked(self.create_backup)
-    #     self.backup_cb.setStyleSheet("font-size: 12px;")
-    #     right_layout.addWidget(self.backup_cb)
-
-    #     right_layout.addStretch()
-    #     options_layout.addWidget(right_widget, 1)
-
-    #     content_layout.addWidget(options_widget)
-
-    #     # Vorschau-Gruppe - kompakter
-    #     preview_group = QGroupBox(self.parent.tr("filename_preview_label"))
-    #     preview_group.setStyleSheet("QGroupBox { margin-top: 5px; }")
-    #     preview_layout = QVBoxLayout()
-    #     preview_layout.setContentsMargins(8, 8, 8, 8)
-
-    #     self.preview_label = QLabel()
-    #     self.preview_label.setFont(QFont("Monospace", 12))
-    #     self.preview_label.setStyleSheet("background-color: #3A3A4A; padding: 6px; border-radius: 4px;")
-    #     self.preview_label.setWordWrap(True)
-    #     self.preview_label.setMinimumHeight(30)
-    #     preview_layout.addWidget(self.preview_label)
-    #     preview_group.setLayout(preview_layout)
-    #     content_layout.addWidget(preview_group)
-
-    #     # Weniger Platz am Ende
-    #     content_layout.addStretch()
-
-    #     scroll_area.setWidget(content_widget)
-    #     main_layout.addWidget(scroll_area, 1)
-
-    #     # ========== 3. Fussbereich (Buttons) – IMMER SICHTBAR ==========
-    #     btn_widget = QWidget()
-    #     btn_widget.setMaximumHeight(60)  # Begrenzung der Button-Höhe
-    #     btn_layout = QHBoxLayout(btn_widget)
-    #     btn_layout.setContentsMargins(0, 8, 0, 8)
-    #     btn_layout.setSpacing(10)
-    #     btn_layout.addStretch()
-
-    #     ok_btn = QPushButton(self.parent.tr("btn_ok"))
-    #     self.parent.style_button(ok_btn, "primary", (100, 25))
-    #     ok_btn.clicked.connect(self.accept)
-
-    #     cancel_btn = QPushButton(self.parent.tr("btn_cancel"))
-    #     self.parent.style_button(cancel_btn, "danger", (100, 25))
-    #     cancel_btn.clicked.connect(self.reject)
-
-    #     btn_layout.addWidget(ok_btn)
-    #     btn_layout.addWidget(cancel_btn)
-
-    #     main_layout.addWidget(btn_widget)
-
-    #     # Focus für Tastatursteuerung
-    #     cancel_btn.setFocusPolicy(Qt.StrongFocus)
-    #     ok_btn.setFocusPolicy(Qt.StrongFocus)
-
-    #     # Initialer Aufruf
-    #     self.on_behavior_changed()
-
     def init_ui(self):
         """Erstellt die UI mit ScrollArea für kleine Bildschirme – Kopf und Buttons bleiben fix."""
 
@@ -24616,7 +24243,7 @@ class SignatureSettingsDialog(QDialog):
         else:  # "Kräftig (empfohlen)"
             dilate_final = 2  # 1
 
-        # 5. Bildverarbeitung (unverändert)
+        # 5. Bildverarbeitung
         try:
             from PIL import Image
             import numpy as np
@@ -24649,36 +24276,44 @@ class SignatureSettingsDialog(QDialog):
                 gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35, 10
             )
 
+            # --- KORREKTUR: Konturen finden und ALLE signifikanten zusammenfassen ---
             kernel = np.ones((5, 5), np.uint8)
             dilated = cv2.dilate(binary, kernel, iterations=2)
 
             contours, _ = cv2.findContours(
                 dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
             )
-            if not contours:
+
+            img_area = img.width * img.height
+
+            # Alle sinnvollen Konturen sammeln (nicht nur die größte!)
+            valid_boxes = []
+            for cnt in contours:
+                area = cv2.contourArea(cnt)
+                if area < 30:                     # sehr kleine Punkte ignorieren
+                    continue
+                if area > 0.8 * img_area:         # komplette Seite ignorieren
+                    continue
+                x, y, w, h = cv2.boundingRect(cnt)
+                valid_boxes.append((x, y, w, h))
+
+            if not valid_boxes:
+                # Fallback: ganze Seite
                 mask = binary
                 x, y, w, h = 0, 0, img.width, img.height
             else:
-                contours = sorted(contours, key=cv2.contourArea, reverse=True)
-                best_contour = None
-                img_area = img.width * img.height
-                for cnt in contours:
-                    area = cv2.contourArea(cnt)
-                    if area < 50:
-                        continue
-                    if area > 0.8 * img_area:
-                        continue
-                    best_contour = cnt
-                    break
-                if best_contour is None:
-                    best_contour = contours[0]
+                # Gemeinsame Bounding-Box über ALLE gültigen Konturen
+                x_min = min(b[0] for b in valid_boxes)
+                y_min = min(b[1] for b in valid_boxes)
+                x_max = max(b[0] + b[2] for b in valid_boxes)
+                y_max = max(b[1] + b[3] for b in valid_boxes)
 
-                x, y, w, h = cv2.boundingRect(best_contour)
                 padding = 10
-                x = max(0, x - padding)
-                y = max(0, y - padding)
-                w = min(img.width - x, w + 2 * padding)
-                h = min(img.height - y, h + 2 * padding)
+                x = max(0, x_min - padding)
+                y = max(0, y_min - padding)
+                w = min(img.width - x, (x_max - x_min) + 2 * padding)
+                h = min(img.height - y, (y_max - y_min) + 2 * padding)
+
                 mask = binary[y : y + h, x : x + w]
 
             cropped_img = img.crop((x, y, x + w, y + h))
