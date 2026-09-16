@@ -24157,9 +24157,9 @@ class SignatureSettingsDialog(QDialog):
 
     ### Neue Signatur erstellen (zuschneiden und Transparenz)
     def create_signature_from_scan(self, sig_number):
-        """Erstellt eine Signatur – zuerst Erklärung, dann Dateiauswahl, dann Name und Linienstärke."""
+        """Erstellt eine Signatur – Erklärung, Dateiauswahl, Name, dann Zuschnitt."""
 
-        # 0. Erklärungsdialog anzeigen (was für ein PDF, wie vorbereiten)
+        # 0. Erklärungsdialog anzeigen
         instruction_dialog = myUniversalDialog(
             self,
             title=self.lang.tr("signature_prepare_title"),
@@ -24189,15 +24189,7 @@ class SignatureSettingsDialog(QDialog):
         base_name = re.sub(r'[\\/*?:"<>|]', "_", base_name)
         default_name = f"{base_name}_clean.png"
 
-        # 3. Übersetzte Combobox-Einträge
-        thickness_items = [
-            self.lang.tr("sig_thickness_normal"),
-            self.lang.tr("sig_thickness_bold"),
-            self.lang.tr("sig_thickness_very_bold"),
-        ]
-        default_thickness = self.lang.tr("sig_thickness_bold")  # "Kräftig (empfohlen)"
-
-        # 4. Dialog für Name und Linienstärke
+        # 3. Dialog für Dateinamen
         dialog = myUniversalDialog(
             self,
             title=self.lang.tr("signature_name_title"),
@@ -24217,39 +24209,25 @@ class SignatureSettingsDialog(QDialog):
                     "placeholder": default_name,
                     "default": default_name,
                 },
-                {
-                    "type": "combobox",
-                    "name": "thickness",
-                    "label": self.lang.tr("sig_thickness_label"),
-                    "items": thickness_items,
-                    "default": default_thickness,
-                },
             ],
         )
         if dialog.exec_() != QDialog.Accepted:
             return
 
         chosen_name = dialog.get_input_value("filename")
-        if not chosen_name.strip():
+        if not chosen_name or not chosen_name.strip():
             chosen_name = default_name
         if not chosen_name.lower().endswith(".png"):
             chosen_name += ".png"
 
-        thickness_choice = dialog.get_input_value("thickness")
-        if thickness_choice == self.lang.tr("sig_thickness_normal"):
-            dilate_final = 1  # 0
-        elif thickness_choice == self.lang.tr("sig_thickness_very_bold"):
-            dilate_final = 4  # 2
-        else:  # "Kräftig (empfohlen)"
-            dilate_final = 2  # 1
-
-        # 5. Bildverarbeitung
+        # 4. Bildverarbeitung
         try:
             from PIL import Image
             import numpy as np
             import cv2
             import io
 
+            # ----- 4a. Bild laden (PDF oder Bilddatei) -----
             if filepath.lower().endswith(".pdf"):
                 import fitz
 
@@ -24269,73 +24247,119 @@ class SignatureSettingsDialog(QDialog):
             else:
                 img = Image.open(filepath).convert("RGB")
 
+            # Sicherheitsgrenze: zu große Bilder herunterskalieren
+            MAX_DIMENSION = 4000
+            if max(img.width, img.height) > MAX_DIMENSION:
+                scale = MAX_DIMENSION / max(img.width, img.height)
+                new_size = (int(img.width * scale), int(img.height * scale))
+                img = img.resize(new_size, Image.LANCZOS)
+
             img_cv = cv2.cvtColor(np.array(img), cv2.COLOR_RGB2BGR)
             gray = cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY)
 
-            binary = cv2.adaptiveThreshold(
-                gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 35, 10
-            )
+            # ----- 4b. Vorverarbeitung für Scan-Robustheit -----
+            gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
+            clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+            gray_norm = clahe.apply(gray_blur)
 
-            # --- KORREKTUR: Konturen finden und ALLE signifikanten zusammenfassen ---
+            # ----- 4c. Binarisierung: Otsu + Adaptive kombiniert -----
+            _, binary_otsu = cv2.threshold(
+                gray_norm, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU
+            )
+            binary_adapt = cv2.adaptiveThreshold(
+                gray_norm,
+                255,
+                cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                cv2.THRESH_BINARY_INV,
+                51,
+                15,
+            )
+            binary = cv2.bitwise_and(binary_otsu, binary_adapt)
+            if cv2.countNonZero(binary) < 100:
+                binary = binary_otsu
+
+            # ----- 4d. Kleine Störpixel entfernen -----
+            open_kernel = np.ones((2, 2), np.uint8)
+            binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, open_kernel)
+
+            # ----- 4e. NUR oberes Drittel betrachten -----
+            upper_third_end = int(img.height * 0.4)
+            binary_search = binary.copy()
+            binary_search[upper_third_end:, :] = 0
+
+            # ----- 4f. Konturen finden & gemeinsame Bounding-Box -----
             kernel = np.ones((5, 5), np.uint8)
-            dilated = cv2.dilate(binary, kernel, iterations=2)
+            dilated = cv2.dilate(binary_search, kernel, iterations=2)
 
             contours, _ = cv2.findContours(
                 dilated, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
             )
 
             img_area = img.width * img.height
-
-            # Alle sinnvollen Konturen sammeln (nicht nur die größte!)
             valid_boxes = []
             for cnt in contours:
                 area = cv2.contourArea(cnt)
-                if area < 30:                     # sehr kleine Punkte ignorieren
+                if area < 30:
                     continue
-                if area > 0.8 * img_area:         # komplette Seite ignorieren
+                if area > 0.8 * img_area:
                     continue
                 x, y, w, h = cv2.boundingRect(cnt)
                 valid_boxes.append((x, y, w, h))
 
             if not valid_boxes:
-                # Fallback: ganze Seite
-                mask = binary
-                x, y, w, h = 0, 0, img.width, img.height
-            else:
-                # Gemeinsame Bounding-Box über ALLE gültigen Konturen
-                x_min = min(b[0] for b in valid_boxes)
-                y_min = min(b[1] for b in valid_boxes)
-                x_max = max(b[0] + b[2] for b in valid_boxes)
-                y_max = max(b[1] + b[3] for b in valid_boxes)
+                QMessageBox.warning(
+                    self,
+                    self.lang.tr("error"),
+                    self.lang.tr("signature_no_content_found"),
+                )
+                return
 
-                padding = 10
-                x = max(0, x_min - padding)
-                y = max(0, y_min - padding)
-                w = min(img.width - x, (x_max - x_min) + 2 * padding)
-                h = min(img.height - y, (y_max - y_min) + 2 * padding)
+            # Gemeinsame Bounding-Box über ALLE gültigen Konturen
+            x_min = min(b[0] for b in valid_boxes)
+            y_min = min(b[1] for b in valid_boxes)
+            x_max = max(b[0] + b[2] for b in valid_boxes)
+            y_max = max(b[1] + b[3] for b in valid_boxes)
 
-                mask = binary[y : y + h, x : x + w]
+            padding = 10
+            x = max(0, x_min - padding)
+            y = max(0, y_min - padding)
+            w = min(img.width - x, (x_max - x_min) + 2 * padding)
+            h = min(img.height - y, (y_max - y) + 2 * padding)
 
+            # Crop
+            mask = binary[y : y + h, x : x + w].copy()
             cropped_img = img.crop((x, y, x + w, y + h))
+
             if mask.shape[:2] != (h, w):
                 mask = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
-            if dilate_final > 0:
-                kernel_thick = np.ones((3, 3), np.uint8)
-                for _ in range(dilate_final):
-                    mask = cv2.dilate(mask, kernel_thick, iterations=1)
+            # ----- 4g. Alpha-Kanal binärisieren -----
+            mask = np.where(mask >= 128, 255, 0).astype(np.uint8)
 
-            alpha = mask
+            # ----- 4h. RGBA zusammensetzen -----
             rgba = Image.new("RGBA", cropped_img.size)
             rgba.paste(cropped_img, (0, 0))
-            rgba.putalpha(Image.fromarray(alpha))
+            rgba.putalpha(Image.fromarray(mask))
+
+            # ----- 4i. Alpha-basiertes Feincropping -----
             rgba = self._auto_crop_transparent(rgba)
 
+            # Sicherheitsprüfung: Wenn das Ergebnis fast leer ist → Fehler
+            if rgba.width < 20 or rgba.height < 20:
+                QMessageBox.warning(
+                    self,
+                    self.lang.tr("error"),
+                    self.lang.tr("signature_no_content_found"),
+                )
+                return
+
+            # ----- 4j. Speichern -----
             sig_dir = Config.SIGNATURES_DIR
             os.makedirs(sig_dir, exist_ok=True)
             dest_path = os.path.join(sig_dir, chosen_name)
-            rgba.save(dest_path, "PNG")
+            rgba.save(dest_path, "PNG", optimize=True)
 
+            # ----- 4k. ComboBox aktualisieren -----
             combo = getattr(self, f"combo_sig{sig_number}")
             self.load_signatures_to_combo(combo)
             for i in range(combo.count()):
@@ -24353,6 +24377,9 @@ class SignatureSettingsDialog(QDialog):
             ).exec_()
 
         except Exception as e:
+            import traceback
+
+            traceback.print_exc()
             myUniversalDialog(
                 self,
                 title=self.lang.tr("error"),
@@ -24361,22 +24388,54 @@ class SignatureSettingsDialog(QDialog):
                 icon_type="error",
             ).exec_()
 
-    def _auto_crop_transparent(self, pil_image):
+    def _auto_crop_transparent(self, pil_image, alpha_threshold=10, min_row_pixels=5):
         """
         Schneidet ein PIL-Bild mit Alphakanal auf das nicht-transparente Rechteck zu.
-        (unverändert, aber sicherstellen, dass es aufgerufen wird)
+
+        Diese Version ist auf Scan-Robustheit optimiert und funktioniert
+        identisch auf macOS und Windows.
+
+        Args:
+            pil_image: PIL Image (wird zu RGBA konvertiert falls nötig)
+            alpha_threshold: Mindest-Alpha-Wert, um als "Inhalt" zu gelten (0-255).
+                            Filtert Antialiasing-Rauschen aus.
+            min_row_pixels: Mindestanzahl nicht-transparenter Pixel pro Zeile/Spalte,
+                            damit diese als "Inhalt" zählt.
+                            Filtert einzelne Rauschpixel am Rand.
         """
         if pil_image.mode != "RGBA":
             pil_image = pil_image.convert("RGBA")
+
         data = np.array(pil_image)
         alpha = data[:, :, 3]
-        non_transparent = np.where(alpha > 0)
-        if len(non_transparent[0]) == 0:
+
+        # Schwelle anwenden: alles unter alpha_threshold gilt als transparent
+        mask = alpha > alpha_threshold  # bool array
+
+        # Zeilen und Spalten mit ausreichend Inhalt finden
+        # (filtert einzelne Rauschpixel am Rand)
+        rows_with_content = np.where(np.sum(mask, axis=1) >= min_row_pixels)[0]
+        cols_with_content = np.where(np.sum(mask, axis=0) >= min_row_pixels)[0]
+
+        if len(rows_with_content) == 0 or len(cols_with_content) == 0:
+            # Kein Inhalt gefunden – Original zurückgeben
             return pil_image
-        top = non_transparent[0].min()
-        bottom = non_transparent[0].max()
-        left = non_transparent[1].min()
-        right = non_transparent[1].max()
+
+        top = int(rows_with_content.min())
+        bottom = int(rows_with_content.max()) + 1  # +1 weil crop exklusiv ist
+        left = int(cols_with_content.min())
+        right = int(cols_with_content.max()) + 1
+
+        # Sicherheitshalber auf Bildgrenzen clampen
+        top = max(0, top)
+        bottom = min(pil_image.height, bottom)
+        left = max(0, left)
+        right = min(pil_image.width, right)
+
+        # Sicherheitsnetz: keine Negativ- oder Null-Größe
+        if right <= left or bottom <= top:
+            return pil_image
+
         return pil_image.crop((left, top, right, bottom))
 
 
@@ -39255,26 +39314,66 @@ class myUniversalDialog(QDialog):
         elif isinstance(current_focused, QDateEdit):
             current_focused.lineEdit().selectAll()
 
+    # def adjust_dialog_height(self):
+    #     """Passt die Dialog-Höhe dynamisch an"""
+    #     from PyQt5.QtWidgets import QLabel
+
+    #     temp_label = QLabel(self.message)
+    #     temp_label.setWordWrap(True)
+    #     temp_label.setTextFormat(Qt.RichText)
+
+    #     available_width = self.width() - 80
+    #     temp_label.resize(available_width, 10000)
+
+    #     text_height = temp_label.heightForWidth(available_width)
+    #     temp_label.deleteLater()
+
+    #     base_height = 250
+    #     icon_height = 50 if self.icon_type and self.icon_type != "" else 0
+    #     total_height = base_height + text_height + icon_height + 60
+
+    #     screen = QApplication.primaryScreen().availableGeometry()
+    #     max_height = int(screen.height() * 0.8)
+    #     self.setFixedHeight(min(int(total_height), max_height))
+
     def adjust_dialog_height(self):
-        """Passt die Dialog-Höhe dynamisch an"""
+        """Passt die Dialog-Höhe dynamisch an - berücksichtigt jetzt auch Eingabefelder."""
         from PyQt5.QtWidgets import QLabel
 
+        # ===== 1. Höhe der Nachricht berechnen =====
         temp_label = QLabel(self.message)
         temp_label.setWordWrap(True)
         temp_label.setTextFormat(Qt.RichText)
 
-        available_width = self.width() - 80
+        available_width = max(300, self.width() - 80)
         temp_label.resize(available_width, 10000)
 
         text_height = temp_label.heightForWidth(available_width)
         temp_label.deleteLater()
 
-        base_height = 250
-        icon_height = 50 if self.icon_type and self.icon_type != "" else 0
-        total_height = base_height + text_height + icon_height + 60
+        # ===== 2. Höhe der Eingabefelder berechnen =====
+        # Jedes Feld besteht aus: Label (~25px) + Widget (~35px) + Margins (~10px)
+        # = ca. 75px pro Feld
+        input_fields_height = 0
+        if self.input_fields:
+            input_fields_height += 20  # Separator + Abstand
+            input_fields_height += len(self.input_fields) * 80  # 80px pro Feld (großzügig)
+            input_fields_height += 10  # Stretch unten
 
+        # ===== 3. Gesamthöhe berechnen =====
+        base_height = 250           # Header, Buttons, Grundabstand
+        icon_height = 50 if self.icon_type and self.icon_type != "" else 0
+        total_height = (
+            base_height
+            + text_height
+            + icon_height
+            + input_fields_height
+            + 60
+        )
+
+        # ===== 4. Auf Bildschirmgröße begrenzen =====
         screen = QApplication.primaryScreen().availableGeometry()
-        max_height = int(screen.height() * 0.8)
+        max_height = int(screen.height() * 0.85)
         self.setFixedHeight(min(int(total_height), max_height))
 
     def reject(self):
