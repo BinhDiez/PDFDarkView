@@ -3410,7 +3410,12 @@ Mẹo: Bạn có thể điều chỉnh cài đặt trong menu ngữ cảnh.
         "username_reset_success": "Đã đặt lại tên người dùng thành tên hệ thống",
 
         # ============================================
-        # 110. THOÁT CHƯƠNG TRÌNH
+        # 110. SIGNATURERSTELLUNG
+        # ============================================
+        "signature_no_content_found": "Không tìm thấy chữ ký ở phần trên của tờ giấy. Vui lòng đảm bảo chữ ký được viết rõ ràng bằng bút bi ở một phần ba phía trên của một tờ giấy trắng.",
+
+        # ============================================
+        # 111. THOÁT CHƯƠNG TRÌNH
         # ============================================
         "app_quitting": "Đang thoát chương trình",
 

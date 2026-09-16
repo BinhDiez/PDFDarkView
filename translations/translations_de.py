@@ -3478,7 +3478,12 @@ Tipp: Im Kontextmenü können Sie die Einstellungen anpassen.
         "username_reset_success": "Benutzername auf System-Benutzernamen zurückgesetzt",
 
         # ============================================
-        # 110. PROGRAMM BEENDEN
+        # 110. SIGNATURERSTELLUNG
+        # ============================================
+        "signature_no_content_found": "Es konnte keine Unterschrift im oberen Bereich des Blattes gefunden werden. Bitte stelle sicher, dass die Unterschrift gut sichtbar mit Kugelschreiber im oberen Drittel eines weißen Blattes Papier steht.",
+
+        # ============================================
+        # 111. PROGRAMM BEENDEN
         # ============================================
         "app_quitting": "Programm wird beendet",
 

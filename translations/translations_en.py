@@ -3414,7 +3414,12 @@ Tip: You can adjust settings in the context menu.
         "username_reset_success": "Username reset to system username",
 
         # ============================================
-        # 110. QUIT PROGRAM
+        # 110. SIGNATURERSTELLUNG
+        # ============================================
+        "signature_no_content_found": "No signature could be found in the upper part of the sheet. Please make sure the signature is clearly visible, written with a ballpoint pen in the upper third of a white sheet of paper.",
+
+        # ============================================
+        # 111. QUIT PROGRAM
         # ============================================
         "app_quitting": "Quitting program",
 
