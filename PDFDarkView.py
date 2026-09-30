@@ -22052,7 +22052,7 @@ class CustomTextItem(QGraphicsTextItem):
 
     def apply_formatting(self):
         """Wendet alle Formatierungen auf den Text an - OHNE INVERTIERUNG BEI SPEICHERUNG"""
-        print(f"\n=== CUSTOMTEXTITEM.APPLY_FORMATTING (KORRIGIERT) ===")
+        print(f"\n=== CUSTOMTEXTITEM.APPLY_FORMATTING ===")
         print(f"Text: '{self.toPlainText()}'")
         print(f"Font Size: {self.font_size}")
         print(f"Alignment: {self.alignment}")
@@ -52116,15 +52116,170 @@ class PDFViewer(QMainWindow):
             self.say(self.tr("text_discarded"))
         print("=== CLEANUP TEXT ABGESCHLOSSEN ===")
 
+    def _insert_text_robust(
+        self, page, rect, text, fontsize, fontname,
+        color_rgb, opacity, align, page_num,
+    ):
+        """
+        Plattformabhängige Text-Einfügung.
+
+        - macOS/Linux: VERHALTEN UNVERÄNDERT (insert_textbox wie bisher).
+        - Windows: Workaround für PyMuPDF-1.27-Bug, bei dem insert_textbox
+        einen negativen Wert (= Erfolg) zurückgibt, aber nichts schreibt.
+        """
+
+        # ============================================================
+        # NICHT-WINDOWS: exakt das ursprüngliche Verhalten
+        # ============================================================
+        if sys.platform != "win32":
+            page.insert_textbox(
+                rect, text,
+                fontsize=fontsize, fontname=fontname,
+                color=color_rgb, fill_opacity=opacity, align=align,
+            )
+            return True
+
+        # ============================================================
+        # WINDOWS: robuster Pfad mit insert_text (umgeht insert_textbox-Bug)
+        # ============================================================
+        print(f"DEBUG: ========== _insert_text_robust START (WIN, Seite {page_num+1}) ==========")
+        print(f"DEBUG:   fontsize={fontsize}  fontname={fontname!r}")
+        print(f"DEBUG:   color_rgb={color_rgb}  opacity={opacity}  align={align}")
+        print(f"DEBUG:   rect=({rect.x0:.2f},{rect.y0:.2f},{rect.x1:.2f},{rect.y1:.2f})")
+        print(f"DEBUG:   page.rect=({page.rect.width:.2f} x {page.rect.height:.2f})")
+        print(f"DEBUG:   page.rotation={page.rotation}")
+        print(f"DEBUG:   text[:120]={text[:120]!r}")
+        print(f"DEBUG:   text_hat_non_ascii={any(ord(c) > 127 for c in text)}")
+        print(f"DEBUG:   pymupdf={fitz.__doc__ if hasattr(fitz, '__doc__') else '?'}")
+
+        # --- Sanity: rect auf Seite klemmen ---
+        if rect.x0 < 0 or rect.y0 < 0 or rect.x1 > page.rect.width or rect.y1 > page.rect.height:
+            print(f"DEBUG:   ⚠️ rect außerhalb der Seite → wird geklemmt")
+            rect = fitz.Rect(
+                max(0, rect.x0), max(0, rect.y0),
+                min(page.rect.width, rect.x1), min(page.rect.height, rect.y1),
+            )
+
+        # --- Font-Kurznamen (insert_text akzeptiert die langen Namen nicht zuverlässig) ---
+        font_map = {
+            "Helvetica": "helv",
+            "Helvetica-Bold": "hebo",
+            "Helvetica-Oblique": "heit",
+            "Helvetica-BoldOblique": "hebi",
+            "helv": "helv",
+            "hebo": "hebo",
+            "heit": "heit",
+            "hebi": "hebi",
+        }
+        fontname_short = font_map.get(fontname, "helv")
+        print(f"DEBUG:   fontname_short={fontname_short!r}")
+
+        # --- Font-Objekt für präzise Textbreitenmessung ---
+        font_obj = None
+        try:
+            font_obj = fitz.Font(fontname=fontname_short)
+        except Exception as e:
+            print(f"DEBUG:   Font-Objekt Exception: {e} - verwende Schätzung")
+
+        # --- Zeilenweise Positionierung ---
+        lines = text.split("\n")
+        line_height = fontsize * 1.2
+        print(f"DEBUG:   {len(lines)} Zeilen, line_height={line_height:.2f}")
+
+        written_count = 0
+        for i, line in enumerate(lines):
+            if not line.strip():
+                continue
+
+            baseline_y = rect.y0 + fontsize + i * line_height
+            if baseline_y > page.rect.height - 2:
+                print(f"DEBUG:   Zeile {i}: baseline_y={baseline_y:.2f} > Seite → skip")
+                continue
+
+            # Textbreite messen
+            try:
+                if font_obj is not None:
+                    text_width = font_obj.text_length(line, fontsize=fontsize)
+                else:
+                    text_width = len(line) * fontsize * 0.6
+            except Exception:
+                text_width = len(line) * fontsize * 0.6
+
+            # X nach Ausrichtung
+            if align == fitz.TEXT_ALIGN_CENTER:
+                x_pos = rect.x0 + (rect.width - text_width) / 2
+            elif align == fitz.TEXT_ALIGN_RIGHT:
+                x_pos = rect.x1 - text_width
+            else:
+                x_pos = rect.x0
+
+            if x_pos < 0:
+                x_pos = 2
+            if x_pos + text_width > page.rect.width - 2:
+                x_pos = max(2, page.rect.width - text_width - 2)
+
+            print(f"DEBUG:   Zeile {i}: baseline_y={baseline_y:.2f} x={x_pos:.2f} "
+                f"width={text_width:.2f} text={line[:50]!r}")
+
+            # Insert mit Fallback ohne opacity
+            inserted = False
+            try:
+                page.insert_text(
+                    fitz.Point(x_pos, baseline_y), line,
+                    fontsize=fontsize, fontname=fontname_short,
+                    color=color_rgb, fill_opacity=opacity,
+                )
+                written_count += 1
+                inserted = True
+                print(f"DEBUG:   ✅ Zeile {i} geschrieben (mit opacity)")
+            except Exception as e:
+                print(f"DEBUG:   insert_text mit opacity Exception: {e}")
+
+            if not inserted:
+                try:
+                    page.insert_text(
+                        fitz.Point(x_pos, baseline_y), line,
+                        fontsize=fontsize, fontname=fontname_short,
+                        color=color_rgb,
+                    )
+                    written_count += 1
+                    print(f"DEBUG:   ✅ Zeile {i} geschrieben (ohne opacity)")
+                except Exception as e2:
+                    print(f"DEBUG:   ❌ Zeile {i} auch ohne opacity fehlgeschlagen: {e2}")
+
+        print(f"DEBUG:   {written_count}/{len(lines)} Zeilen geschrieben")
+
+        # --- Sofort-Verifikation ---
+        try:
+            extracted = page.get_text()
+            needle = None
+            for l in lines:
+                if l.strip():
+                    needle = l.strip()[:15]
+                    break
+            if needle and needle in extracted:
+                print(f"DEBUG:   ✅ VERIFIKATION OK – '{needle}' ist auf der Seite")
+            else:
+                print(f"DEBUG:   ❌ VERIFIKATION FEHLGESCHLAGEN – '{needle}' NICHT gefunden")
+        except Exception as e:
+            print(f"DEBUG:   Verifikation Exception: {e}")
+
+        print(f"DEBUG: ========== _insert_text_robust ENDE (WIN, Seite {page_num+1}) ==========")
+        return written_count > 0
+
     ### Speichert Text im PDF mit Formatierung (3 Methoden)
     ### kann als Muster bei Positionierungsproblemen herangezogen werden
     # mit transparentem Text
+
     def _save_all_texts_and_crosses(self, reload_after_save=True):
         if not self.all_text_items:
             self.say(self.tr("no_texts_to_save"))
             return
 
-        print("\n=== ALLE TEXTE GEMEINSAM SPEICHERN (MIT TRANSPARENZ) ===")
+        print("\nDEBUG: ============================================================")
+        print("DEBUG: === ALLE TEXTE GEMEINSAM SPEICHERN (MIT TRANSPARENZ) ===")
+        print("DEBUG: ============================================================")
+        print(f"DEBUG: Anzahl Items in all_text_items: {len(self.all_text_items)}")
 
         texts_data = []
         last_item = self.all_text_items[-1]
@@ -52174,6 +52329,7 @@ class PDFViewer(QMainWindow):
                         "line_width": format_data["line_width"],
                         "arm_length": format_data["arm_length"],
                     }
+                    print(f"DEBUG: Kreuz gesammelt: Seite {item.page+1}, Pos=({corrected_pos.x():.1f},{corrected_pos.y():.1f})")
                 else:
                     text_count += 1
                     block_width_px = item.boundingRect().width()
@@ -52211,14 +52367,22 @@ class PDFViewer(QMainWindow):
                         "block_width": block_width_px,
                         "is_x_mark": False,
                     }
+                    print(f"DEBUG: Text gesammelt: Seite {item.page+1}, "
+                        f"Pos=({item.pos().x():.1f},{item.pos().y():.1f}), "
+                        f"block_width_px={block_width_px:.1f}, "
+                        f"text={original_text[:60]!r}")
                 texts_data.append(data)
             except Exception as e:
-                print(f"Fehler beim Sammeln: {e}")
+                print(f"DEBUG: Fehler beim Sammeln: {e}")
+                traceback.print_exc()
                 continue
 
         if not texts_data:
             self.say(self.tr("no_valid_texts"))
             return
+
+        print(f"DEBUG: texts_data enthält {len(texts_data)} Elemente "
+            f"({text_count} Texte, {cross_count} Kreuze)")
 
         # Items aus der Szene entfernen
         for item in self.all_text_items:
@@ -52247,12 +52411,16 @@ class PDFViewer(QMainWindow):
                 else:
                     print("DEBUG: Dokument neu geöffnet ohne Passwort")
 
+            print(f"DEBUG: Dokument hat {len(doc)} Seiten")
+
             for data in texts_data:
                 page_num = data["page"]
                 if page_num >= len(doc):
+                    print(f"DEBUG: Seite {page_num+1} existiert nicht im Dokument – überspringe")
                     continue
                 page = doc[page_num]
                 if page_num >= len(self.page_items):
+                    print(f"DEBUG: page_num {page_num} >= len(page_items) – überspringe")
                     continue
                 page_item = self.page_items[page_num]
 
@@ -52278,6 +52446,9 @@ class PDFViewer(QMainWindow):
                         color.green() / 255.0,
                         color.blue() / 255.0,
                     )
+                    print(f"DEBUG: Zeichne Kreuz auf Seite {page_num+1} "
+                        f"Zentrum=({center_x_pt:.1f},{center_y_pt:.1f}) "
+                        f"arm={arm_length:.1f} lw={line_width:.2f} color={color_rgb}")
                     page.draw_line(
                         fitz.Point(center_x_pt - arm_length, center_y_pt - arm_length),
                         fitz.Point(center_x_pt + arm_length, center_y_pt + arm_length),
@@ -52306,6 +52477,15 @@ class PDFViewer(QMainWindow):
                     width_mode = data["width_mode"]
                     opacity = data.get("opacity", 100) / 100.0  # 0.0 - 1.0
 
+                    print(f"DEBUG: ---------- Text auf Seite {page_num+1} ----------")
+                    print(f"DEBUG:   local_pos=({local_pos.x():.1f},{local_pos.y():.1f})")
+                    print(f"DEBUG:   block_x_pt={block_x_pt:.2f} block_y_pt={block_y_pt:.2f}")
+                    print(f"DEBUG:   block_width_pdf={block_width_pdf:.2f}")
+                    print(f"DEBUG:   scale_x={scale_x:.4f} scale_y={scale_y:.4f}")
+                    print(f"DEBUG:   pdf_font_size={pdf_font_size:.2f}")
+                    print(f"DEBUG:   width_mode={width_mode!r}")
+                    print(f"DEBUG:   text={text_content[:80]!r}")
+
                     # Schriftart für PyMuPDF
                     fontname = "Helvetica"
                     if bold and italic:
@@ -52314,6 +52494,7 @@ class PDFViewer(QMainWindow):
                         fontname = "Helvetica-Bold"
                     elif italic:
                         fontname = "Helvetica-Oblique"
+                    print(f"DEBUG:   fontname={fontname!r}")
 
                     # Zeilenumbrüche verarbeiten
                     lines = text_content.split("\n")
@@ -52329,6 +52510,8 @@ class PDFViewer(QMainWindow):
                                 target_width_pdf = block_width_pdf
                         else:
                             target_width_pdf = pdf_width
+
+                        print(f"DEBUG:   target_width_pdf={target_width_pdf:.2f}")
 
                         wrapped_lines = []
                         for original_line in lines:
@@ -52352,6 +52535,7 @@ class PDFViewer(QMainWindow):
                         text_content = "\n".join(wrapped_lines)
                         lines = wrapped_lines
                         line_height = pdf_font_size * 1.2
+                        print(f"DEBUG:   nach Wrap: {len(lines)} Zeilen")
 
                     # RGB-Farbe (ohne Alpha für insert_textbox)
                     color_rgb = (
@@ -52362,6 +52546,7 @@ class PDFViewer(QMainWindow):
 
                     # Gesamthöhe des Textblocks berechnen
                     text_block_height = len(lines) * line_height + pdf_font_size
+                    print(f"DEBUG:   text_block_height={text_block_height:.2f}")
 
                     # Textbox für den gesamten Text
                     text_rect = fitz.Rect(
@@ -52370,6 +52555,9 @@ class PDFViewer(QMainWindow):
                         block_x_pt + block_width_pdf,
                         block_y_pt + text_block_height,
                     )
+                    print(f"DEBUG:   text_rect=({text_rect.x0:.2f},{text_rect.y0:.2f},"
+                        f"{text_rect.x1:.2f},{text_rect.y1:.2f}) "
+                        f"w={text_rect.width:.2f} h={text_rect.height:.2f}")
 
                     # Alignment für insert_textbox konvertieren
                     if alignment == Qt.AlignLeft:
@@ -52379,17 +52567,21 @@ class PDFViewer(QMainWindow):
                     else:
                         text_align = fitz.TEXT_ALIGN_RIGHT
 
-                    # TEXT MIT TRANSPARENZ EINFÜGEN (wie in der Wasserzeichen-Methode)
+                    # ===== ROBUSTE TEXT-EINFÜGUNG =====
                     if text_content.strip():
-                        page.insert_textbox(
-                            text_rect,
-                            text_content,
+                        self._insert_text_robust(
+                            page=page,
+                            rect=text_rect,
+                            text=text_content,
                             fontsize=pdf_font_size,
                             fontname=fontname,
-                            color=color_rgb,
-                            fill_opacity=opacity,  # ← Transparenz
+                            color_rgb=color_rgb,
+                            opacity=opacity,
                             align=text_align,
+                            page_num=page_num,
                         )
+                    else:
+                        print(f"DEBUG:   text_content leer nach strip – überspringe")
 
                     # UNTERSTREICHUNG (falls aktiv)
                     if underline:
@@ -52425,12 +52617,14 @@ class PDFViewer(QMainWindow):
                 suffixes=[self.tr("filename_with_text")]
             )
             final_path = self._prepare_overwrite_target(target_path)
+            print(f"DEBUG: Ziel-Pfad: {final_path}")
 
             temp_dir = tempfile.gettempdir()
             temp_filename = (
                 f"temp_texts_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.pdf"
             )
             temp_path = os.path.join(temp_dir, temp_filename)
+            print(f"DEBUG: Temp-Pfad: {temp_path}")
 
             if hasattr(self, "current_password") and self.current_password:
                 doc.save(
@@ -52447,20 +52641,46 @@ class PDFViewer(QMainWindow):
                 doc.save(temp_path, garbage=4, deflate=True)
                 print("DEBUG: Datei unverschlüsselt gespeichert")
 
+            # Verifikation VOR dem Move (auf der temp-Datei)
+            print("DEBUG: ---------- POST-SAVE-CHECK (auf temp-Datei) ----------")
+            try:
+                vdoc = fitz.open(temp_path)
+                print(f"DEBUG:   verify doc: {len(vdoc)} Seiten, "
+                    f"Größe={os.path.getsize(temp_path)} Bytes")
+                for data in texts_data:
+                    if data.get("is_x_mark"):
+                        continue
+                    pn = data["page"]
+                    if pn >= len(vdoc):
+                        print(f"DEBUG:   Seite {pn+1} existiert nicht im Verify-Doc")
+                        continue
+                    page_text = vdoc[pn].get_text()
+                    needle = data["text"].split("\n")[0][:15]
+                    found = needle in page_text
+                    print(f"DEBUG:   Seite {pn+1}: suche {needle!r} → "
+                        f"{'GEFUNDEN ✅' if found else 'FEHLT ❌'}")
+                    print(f"DEBUG:   len(page_text)={len(page_text)}, "
+                        f"erste 300 Zeichen: {page_text[:300]!r}")
+                vdoc.close()
+            except Exception as e:
+                print(f"DEBUG:   Post-Save-Check Exception: {e}")
+                traceback.print_exc()
+
             if not (hasattr(self, "current_doc") and doc is self.current_doc):
                 doc.close()
             shutil.move(temp_path, final_path)
+            print(f"DEBUG: Move nach {final_path} abgeschlossen")
 
             # Passwort für die neue Datei speichern
             if hasattr(self, "current_password") and self.current_password:
                 PDFPasswordManager.save_password(final_path, self.current_password)
                 print(f"DEBUG: Passwort für neue Datei gespeichert: {final_path}")
 
-            # Windows-spezifische Verzögerung (optional, falls move nicht reicht)
+            # Windows-spezifische Verzögerung
             if sys.platform == "win32":
-                QApplication.processEvents()  # Events verarbeiten
+                QApplication.processEvents()
 
-            # ERFOLGSMELDUNG
+            # ============ ERFOLGSMELDUNG (unverändert) ============
             settings = QSettings("BinhDiez", "PDFDarkView")
             behavior = settings.value("filename/behavior", "new_file", type=str)
             create_backup = settings.value("create_backup", True, type=bool)
@@ -52489,21 +52709,7 @@ class PDFViewer(QMainWindow):
                             else "cross_word_singular"
                         ),
                     )
-                    voice_msg = self.tr(
-                        "texts_crosses_saved_new_file",
-                        text_count,
-                        self.tr(
-                            "text_word_plural"
-                            if text_count != 1
-                            else "text_word_singular"
-                        ),
-                        cross_count,
-                        self.tr(
-                            "cross_word_plural"
-                            if cross_count != 1
-                            else "cross_word_singular"
-                        ),
-                    )
+                    voice_msg = msg
                 elif text_count > 0:
                     msg = self.tr(
                         "texts_saved_new_file",
@@ -52577,10 +52783,12 @@ class PDFViewer(QMainWindow):
             )
             self._cleanup_all_modes()
 
-        except Exception as e:
-            print(f"\n❌ FEHLER beim Speichern: {str(e)}")
-            import traceback
+            print("DEBUG: ============================================================")
+            print("DEBUG: === SPEICHERN ABGESCHLOSSEN ===")
+            print("DEBUG: ============================================================\n")
 
+        except Exception as e:
+            print(f"DEBUG: ❌ FEHLER beim Speichern: {str(e)}")
             traceback.print_exc()
             QMessageBox.critical(
                 self, self.tr("error"), f"{self.tr('save_error')}:\n{str(e)}"
