@@ -372,34 +372,6 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 <details>
 <summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
-## Version 2.4.5
-
-### Verbesserungen
-
-- Weitere Zeitoptimierung durch Lazy Import`s
-
-### Fehlerbehebungen
-
-- Diverse Bugfixes
-
----
-
-## Version 2.4.4
-
-### Neu
-
-- Dateisuffixe mit optionalem Benutzernamen
-
-### Verbesserungen
-
-- Weitere Zeitmessungen zur Performanceanalyse
-
-### Fehlerbehebungen
-
-- Diverse Bugfixes
-
----
-
 ## Version 2.5.1
 
 ### Neu
@@ -410,6 +382,31 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 
 - Verbesserte Handhabung von Namen bei der Dateinamensbildung, wenn mehrere Personen das selbe Dokument bearbeiten.
 - BugFix beim Speichern von Text unter Windows 
+
+---
+
+## Version 2.4.5
+
+### Verbesserungen
+
+- Lazy Import
+- Spracherkennung und Auswahl umstrukturiert
+- BugFix OCR Test Timeout in langsamere Systemumgebungen
+
+---
+
+## Version 2.4.4
+
+### Neu
+
+- Suffixe mit optionalem Benutzernamem
+
+### Verbesserungen
+
+- BugFix
+- weitere Zeitmessungen zur Verkürzung der Startzeit
+
+---
 
 ## Version 2.4.3
 
