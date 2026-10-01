@@ -400,6 +400,17 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 
 ---
 
+## Version 2.5.1
+
+### Neu
+
+- Neue Optionen in Einstellungen - Dateiname
+
+### Verbesserungen
+
+- Verbesserte Handhabung von Namen bei der Dateinamensbildung, wenn mehrere Personen das selbe Dokument bearbeiten.
+- BugFix beim Speichern von Text unter Windows 
+
 ## Version 2.4.3
 
 ### Neu
