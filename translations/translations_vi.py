@@ -3415,7 +3415,30 @@ Mẹo: Bạn có thể điều chỉnh cài đặt trong menu ngữ cảnh.
         "signature_no_content_found": "Không tìm thấy chữ ký ở phần trên của tờ giấy. Vui lòng đảm bảo chữ ký được viết rõ ràng bằng bút bi ở một phần ba phía trên của một tờ giấy trắng.",
 
         # ============================================
-        # 111. THOÁT CHƯƠNG TRÌNH
+        # 111. NEUE OPTIONEN IM DATEINAMENSEINSTELLUNGEN
+        # ============================================
+        "delete_source_after_save": "Xóa tệp gốc sau khi lưu các nội dung chèn",
+        "delete_source_tooltip": "Tệp gốc sẽ bị xóa sau khi lưu thành công. Nên tắt sao lưu nếu không muốn nhân bản tệp.",
+        "delete_source_preview_hint": "⚠ Tệp gốc sẽ bị xóa sau khi lưu.",
+        "username_position_label": "Vị trí:",
+        "username_position_suffix": "Thêm vào hậu tố",
+        "username_position_before_timestamp": "Thêm vào tên cơ sở",
+        "username_accumulate": "Giữ lại tên từ tệp trước",
+        "username_accumulate_tooltip": (
+            "Các tên đã có trong tên tệp sẽ được giữ lại khi lưu "
+            "và tên mới sẽ được thêm vào.\n\n"
+            "Ví dụ: 'Test mit_Unterschrift_Müller.pdf' + tên mới 'Meier' "
+            "→ 'Test mit_Unterschrift_Müller_Meier.pdf'"
+        ),
+        # ----------------------------------------------------------
+        # NOCH NICHT VERWENDET (muss noch eingebaut werden)
+        # ----------------------------------------------------------
+        "save_success_source_deleted": "Đã lưu: {0}\nTệp trước đó đã bị xóa.",
+        "save_success_source_kept":    "Đã lưu: {0}\nTệp trước đó được giữ lại (sao lưu đang bật hoặc tùy chọn đã tắt).",
+        "save_success_destructive":    "Đã lưu: {0}\nTệp gốc không bị thay đổi.",
+
+        # ============================================
+        # 112. THOÁT CHƯƠNG TRÌNH
         # ============================================
         "app_quitting": "Đang thoát chương trình",
 

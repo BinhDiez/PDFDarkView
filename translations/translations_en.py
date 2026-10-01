@@ -3419,7 +3419,30 @@ Tip: You can adjust settings in the context menu.
         "signature_no_content_found": "No signature could be found in the upper part of the sheet. Please make sure the signature is clearly visible, written with a ballpoint pen in the upper third of a white sheet of paper.",
 
         # ============================================
-        # 111. QUIT PROGRAM
+        # 111. NEUE OPTIONEN IM DATEINAMENSEINSTELLUNGEN
+        # ============================================
+        "delete_source_after_save": "Delete source file after saving insertions",
+        "delete_source_tooltip": "The source file is deleted after successful saving. Backup should be disabled if no file multiplication is desired.",
+        "delete_source_preview_hint": "⚠ Source file will be deleted after saving.",
+        "username_position_label": "Position:",
+        "username_position_suffix": "Append to suffix",
+        "username_position_before_timestamp": "Append to base name",
+        "username_accumulate": "Keep names from previous file",
+        "username_accumulate_tooltip": (
+            "Names already present in the filename are kept on save "
+            "and the new name is appended.\n\n"
+            "Example: 'Test mit_Unterschrift_Müller.pdf' + new name 'Meier' "
+            "→ 'Test mit_Unterschrift_Müller_Meier.pdf'"
+        ),
+        # ----------------------------------------------------------
+        # NOCH NICHT VERWENDET (muss noch eingebaut werden)
+        # ----------------------------------------------------------
+        "save_success_source_deleted": "Saved: {0}\nThe previous file was deleted.",
+        "save_success_source_kept":    "Saved: {0}\nThe previous file was kept (backup active or option disabled).",
+        "save_success_destructive":    "Saved: {0}\nThe original file was not modified.",
+
+        # ============================================
+        # 112. QUIT PROGRAM
         # ============================================
         "app_quitting": "Quitting program",
 

@@ -3483,7 +3483,24 @@ Tipp: Im Kontextmenü können Sie die Einstellungen anpassen.
         "signature_no_content_found": "Es konnte keine Unterschrift im oberen Bereich des Blattes gefunden werden. Bitte stelle sicher, dass die Unterschrift gut sichtbar mit Kugelschreiber im oberen Drittel eines weißen Blattes Papier steht.",
 
         # ============================================
-        # 111. PROGRAMM BEENDEN
+        # 111. NEUE OPTIONEN IM DATEINAMENSEINSTELLUNGE
+        # ============================================
+        "delete_source_after_save": "Quelldatei nach dem Speichern von Einfügungen löschen                   ",
+        "delete_source_tooltip": "Die Ausgangsdatei wird nach erfolgreichem Speichern gelöscht. Backup sollte deaktiviert sein, wenn keine Dateivermehrung gewünscht ist.",
+        "delete_source_preview_hint": "⚠ Quelldatei wird nach dem Speichern gelöscht.",
+        "username_position_label": "Position:",
+        "username_position_suffix": "An Suffix anhängen",
+        "username_position_before_timestamp": "An Basisnamen anhängen",
+        "username_accumulate": "Namen aus vorheriger Datei übernehmen",
+        "username_accumulate_tooltip": (
+            "Bereits im Dateinamen stehende Namen werden beim Speichern "
+            "übernommen und der neue Name wird ergänzt.\n\n"
+            "Beispiel: 'Test mit_Unterschrift_Müller.pdf' + neuer Name 'Meier' "
+            "→ 'Test mit_Unterschrift_Müller_Meier.pdf'"
+        ),
+
+        # ============================================
+        # 112. PROGRAMM BEENDEN
         # ============================================
         "app_quitting": "Programm wird beendet",
 
