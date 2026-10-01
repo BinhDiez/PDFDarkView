@@ -206,11 +206,14 @@ from PyQt5.QtGui import (
 ### AKTUELLE PROGRAMM-VERSION
 ### = GitHub‑Release‑Tag (ohne führendes 'v')
 ### ====================================================
-APP_VERSION = "2.4.5"
+APP_VERSION = "2.5.1"
 
 # ACHTUNG: nur als PW geschütztes ZIP auf GitHub hochladen
 
 """ Changelog:
+        2.4.5
+        --> Neue Optionen im Dateinames SettingsDialog
+        --> BugFix beim Speichern von Text unter Windows PyMuPDF
         2.4.5 --> Lazy Importe
         --> Spracherkennung und Auswahl umstrukturiert
         --> BugFix OCR Test Timeout in langsamere Systemumgebungen
@@ -2456,6 +2459,43 @@ class FilenameSettingsDialog(QDialog):
 
         username_layout.addLayout(username_input_layout)
 
+        # --- NEU: Position der Benutzernamen ---
+        pos_row = QHBoxLayout()
+        pos_label = QLabel(self.parent.tr("username_position_label"))
+        pos_label.setMinimumWidth(80)
+        pos_font = QFont(dialog_font)
+        pos_font.setBold(True)
+        pos_label.setFont(pos_font)
+
+        self.username_pos_combo = QComboBox()
+        self.username_pos_combo.addItem(
+            self.parent.tr("username_position_suffix"), "suffix"
+        )
+        self.username_pos_combo.addItem(
+            self.parent.tr("username_position_before_timestamp"),
+            "before_timestamp",
+        )
+        idx = self.username_pos_combo.findData(self.username_position)
+        if idx >= 0:
+            self.username_pos_combo.setCurrentIndex(idx)
+        self.username_pos_combo.currentIndexChanged.connect(self.update_preview)
+        self.username_pos_combo.currentIndexChanged.connect(
+            self._update_username_controls
+        )
+
+        pos_row.addWidget(pos_label)
+        pos_row.addWidget(self.username_pos_combo, 1)
+        username_layout.addLayout(pos_row)
+
+        # --- NEU: Namen akkumulieren ---
+        self.accumulate_cb = QCheckBox(self.parent.tr("username_accumulate"))
+        self.accumulate_cb.setChecked(self.accumulate_usernames)
+        self.accumulate_cb.toggled.connect(self.update_preview)
+        self.accumulate_cb.setToolTip(
+            self.parent.tr("username_accumulate_tooltip")
+        )
+        username_layout.addWidget(self.accumulate_cb)
+
         hint_label = QLabel(self.parent.tr("username_hint"))
         hint_label.setWordWrap(True)
 
@@ -2579,6 +2619,19 @@ class FilenameSettingsDialog(QDialog):
         self.backup_cb.setChecked(self.create_backup)
 
         right_layout.addWidget(self.backup_cb)
+
+        # NEU: Quelldatei nach Speichern löschen
+        self.delete_source_cb = QCheckBox(
+            self.parent.tr("delete_source_after_save")
+        )
+        self.delete_source_cb.setChecked(self.delete_source_after_save)
+        self.delete_source_cb.toggled.connect(self.update_preview)
+        self.delete_source_cb.setToolTip(
+            self.parent.tr("delete_source_tooltip")
+        )
+        right_layout.addWidget(self.delete_source_cb)
+
+        right_layout.addStretch()
         right_layout.addStretch()
 
         options_layout.addWidget(right_widget, 1)
@@ -2681,6 +2734,18 @@ class FilenameSettingsDialog(QDialog):
 
         self.create_backup = self.settings.value("create_backup", True, type=bool)
 
+        # NEU: Quelldatei löschen
+        self.delete_source_after_save = self.settings.value(
+            "filename/delete_source_after_save", False, type=bool
+        )
+
+        # NEU: Position der Namen + Akkumulation
+        self.username_position = self.settings.value(
+            "filename/username_position", "suffix", type=str
+        )
+        self.accumulate_usernames = self.settings.value(
+            "filename/accumulate_usernames", False, type=bool
+        )
     def _get_system_username(self):
         """Ermittelt den System-Benutzernamen und formatiert ihn."""
         try:
@@ -2703,6 +2768,15 @@ class FilenameSettingsDialog(QDialog):
         except:
             return ""
 
+    def _update_username_controls(self):
+        """Aktiviert/deaktiviert die Akkumulations-Checkbox je nach Position."""
+        use_username = self.use_username_cb.isChecked()
+        is_before = self.username_pos_combo.currentData() == "before_timestamp"
+        self.username_pos_combo.setEnabled(use_username)
+        self.accumulate_cb.setEnabled(use_username and is_before)
+        if not is_before:
+            self.accumulate_cb.setChecked(False)
+
     def _reset_username_to_system(self):
         """Setzt den Benutzernamen auf den System-Benutzernamen zurück."""
         system_username = self._get_system_username()
@@ -2717,6 +2791,10 @@ class FilenameSettingsDialog(QDialog):
         self.ts_group.setEnabled(is_new_file)
         self.sep_group.setEnabled(is_new_file)
         self.update_preview()
+
+        # NEU: Quelldatei löschen nur bei "neue Datei"
+        if hasattr(self, "delete_source_cb"):
+            self.delete_source_cb.setEnabled(is_new_file)
 
         if not is_new_file:
             settings = QSettings("BinhDiez", "PDFDarkView")
@@ -2761,8 +2839,28 @@ class FilenameSettingsDialog(QDialog):
 
         self._overwrite_info_showing = False
 
+    # Bekannte Suffix-Marker, die im aktuellen Dateinamen auftauchen können.
+    # Alles was RECHTS von einem dieser Marker steht, ist eine Namenskette.
+    _KNOWN_SUFFIX_MARKERS = [
+        "mit_Unterschrift", "with_signature",
+        "mit_Text", "with_text",
+        "mit_Bildern", "with_images",
+        "mit_Bild", "with_image",
+        "mit_Formen", "with_forms",
+        "mit_Form", "with_form",
+        "mit_Seitenzahl", "with_page_number",
+        "mit_Seitenzahlen", "with_page_numbers",
+        "mit_Seitenangabe", "with_page_declaration",
+        "mit_Datum", "with_date",
+        "mit_Wasserzeichen", "with_watermark",
+        "mit_Auslöschung", "with_redacted_text",
+        "mit_Einfuegung", "mit_Einfügung", "with_insertion",
+        "mit_Einfuegungen", "mit_Einfügungen", "with_insertions",
+        "geschützt", "protected",
+    ]
+
     def update_preview(self):
-        """Aktualisiert die Vorschau basierend auf aktuellen Einstellungen."""
+        """Aktualisiert die Vorschau – spiegelt exakt die Logik von FilenameGenerator.generate()."""
         if self.rb_overwrite.isChecked():
             self.preview_label.setText(
                 self.parent.tr("behavior_overwrite")
@@ -2782,29 +2880,89 @@ class FilenameSettingsDialog(QDialog):
 
         use_username = self.use_username_cb.isChecked()
         username = self.username_input.text().strip() if use_username else ""
+        username_position = self.username_pos_combo.currentData() or "suffix"
+        accumulate = self.accumulate_cb.isChecked()
 
+        # Platzhalter-Suffix für die Vorschau
+        preview_suffix = "mit_Text"
+
+        # ---- Basisnamen aus aktueller PDF ermitteln ----
         if self.parent and hasattr(self.parent, "pdf_path") and self.parent.pdf_path:
             base_name = os.path.splitext(os.path.basename(self.parent.pdf_path))[0]
         else:
             base_name = "Beispieldokument"
 
+        # ---- Timestamp-Reste entfernen (wie in generate()) ----
+        cleaned = re.sub(r"[\d\-_\.:]{8,}", "", base_name)
+        cleaned = re.sub(r"_{2,}", "_", cleaned).strip("_ ")
+        cleaned = re.sub(r" {2,}", " ", cleaned).strip(" ")
+
+        # ---- Namen-Extraktion über Suffix-Marker (geräteunabhängig) ----
+        extracted_names = []
+
+        # Schritt A: Bekannten Suffix-Marker im Dateinamen suchen
+        # (verwende dieselbe Logik wie generate(), nur mit erweiterter Marker-Liste)
+        cleaned, names_from_marker = FilenameGenerator._extract_names_after_suffix(
+            cleaned, self._KNOWN_SUFFIX_MARKERS
+        )
+
+        if use_username and accumulate:
+            extracted_names.extend(names_from_marker)
+
+            # Schritt B: Fallback über known_usernames (lokal bekannte Namen)
+            known_usernames = self.settings.value(
+                "filename/known_usernames", [], type=list
+            )
+            if not isinstance(known_usernames, list):
+                known_usernames = []
+            if known_usernames:
+                cleaned, trailing = FilenameGenerator._extract_trailing_usernames(
+                    cleaned, known_usernames
+                )
+                for n in trailing:
+                    if n not in extracted_names:
+                        extracted_names.append(n)
+
+        base_name = cleaned.strip("_ ") or "Beispieldokument"
+
+        # ---- Namen sammeln (deduped, aktueller User angehängt) ----
+        all_names = []
+        if use_username and username:
+            for n in extracted_names:
+                if n and n not in all_names:
+                    all_names.append(n)
+            if username not in all_names:
+                all_names.append(username)
+
+        # ---- Parts zusammenbauen ----
         now = datetime.now()
         ts_str = now.strftime(fmt) if use_ts and fmt else ""
         parts = []
+
         if ts_pos == "before" and ts_str:
             parts.append(ts_str)
         parts.append(base_name)
+
+        # Basisname-Modus: Namen vor den Suffixen
+        if use_username and all_names and username_position == "before_timestamp":
+            if separator == "_":
+                parts.extend(all_names)
+            else:
+                parts.extend(["_" + n for n in all_names])
+
         if ts_pos == "after" and ts_str:
             parts.append(ts_str)
 
-        suffix = "mit_Text"
-        if username:
-            suffix = f"{suffix}_{username}"
-        parts.append(suffix)
+        # Suffix-Modus: Namen an den Suffix anhängen
+        suffix_str = preview_suffix
+        if use_username and all_names and username_position == "suffix":
+            suffix_str = preview_suffix + "_" + "_".join(all_names)
+        parts.append(suffix_str)
 
         if ts_pos == "end" and ts_str:
             parts.append(ts_str)
 
+        # ---- Zusammenfügen ----
         if separator == "_":
             preview = "_".join(parts)
             preview = re.sub(r"_+", "_", preview)
@@ -2814,6 +2972,11 @@ class FilenameSettingsDialog(QDialog):
         else:
             preview = "".join(parts)
         preview += ".pdf"
+
+        # Hinweis auf Quelldatei-Löschung
+        if self.delete_source_cb.isChecked():
+            preview += "\n\n" + self.parent.tr("delete_source_preview_hint")
+
         self.preview_label.setText(preview)
 
     def accept(self):
@@ -2855,8 +3018,21 @@ class FilenameSettingsDialog(QDialog):
                 if system_username:
                     self.settings.setValue("filename/username", system_username)
 
-        # Backup für Seiten-Operationen
-        self.settings.setValue("create_backup", self.backup_cb.isChecked())
+        # NEU: Position der Namen
+        self.settings.setValue(
+            "filename/username_position",
+            self.username_pos_combo.currentData() or "suffix",
+        )
+        self.settings.setValue(
+            "filename/accumulate_usernames",
+            self.accumulate_cb.isChecked(),
+        )
+
+        # NEU: Quelldatei löschen
+        self.settings.setValue(
+            "filename/delete_source_after_save",
+            self.delete_source_cb.isChecked(),
+        )
 
         self.settings.sync()
 
@@ -2871,6 +3047,82 @@ class FilenameSettingsDialog(QDialog):
 # mit Wörterbuchunterstützung
 class FilenameGenerator:
     """Zentrale Dateinamen-Generierung – Suffixe werden als Parameter übergeben (bereits übersetzt)."""
+
+    @classmethod
+    def _extract_names_after_suffix(cls, base_name, suffixes_list):
+        """
+        Sucht im base_name nach einem bekannten Suffix (z.B. 'mit_Unterschrift').
+        Alles RECHTS davon (durch _ oder Whitespace getrennt) wird als
+        Namenskette interpretiert und extrahiert.
+
+        Dies funktioniert GERÄTEUNABHÄNGIG, weil der Suffix als Marker dient
+        und nicht auf die lokale known_usernames-Liste angewiesen ist.
+
+        Gibt (base_name_links, liste_der_namen) zurück.
+        """
+        if not suffixes_list or not base_name:
+            return base_name, []
+
+        for suf in suffixes_list:
+            suf_clean = suf.lstrip("_")
+            # Suffix als eigenständiges Token (umgeben von _ / Whitespace / Rand)
+            pattern = r"(?:^|[_\s])" + re.escape(suf_clean) + r"(?:[_\s]|$)"
+            m = re.search(pattern, base_name)
+            if not m:
+                continue
+
+            before = base_name[: m.start()].rstrip("_ ")
+            after = base_name[m.end():].strip("_ ")
+
+            names = []
+            if after:
+                tokens = [t for t in re.split(r"[_\s]+", after) if t]
+                # Timestamps / Zahlenreihen filtern
+                tokens = [
+                    t for t in tokens
+                    if not re.fullmatch(r"[\d\-\.:]+", t)
+                ]
+                names = tokens
+
+            return before, names
+
+        return base_name, []
+
+    @classmethod
+    def _extract_trailing_usernames(
+        cls, base_name, known_usernames, separators=("_", " ")
+    ):
+        """
+        Entfernt am ENDE des base_name stehende Benutzernamen, die in
+        known_usernames enthalten sind. Probiert beide Separatoren ("_" und " ")
+        durch – unabhängig davon, welcher gerade in den Settings steht.
+        Gibt (bereinigter_base_name, liste_der_namen) zurück.
+
+        Der dritte Parameter ist OPTIONAL (Default: ("_", " ")).
+        """
+        if not known_usernames or not base_name:
+            return base_name, []
+
+        known_set = {n for n in known_usernames if n}
+        if not known_set:
+            return base_name, []
+
+        names = []
+        changed = True
+        while changed:
+            changed = False
+            for sep in separators:
+                for name in known_set:
+                    suffix = sep + name
+                    if base_name.endswith(suffix) and len(base_name) > len(suffix):
+                        base_name = base_name[: -len(suffix)]
+                        names.insert(0, name)
+                        changed = True
+                        break
+                if changed:
+                    break
+
+        return base_name, names
 
     @classmethod
     def generate(
@@ -2893,13 +3145,24 @@ class FilenameGenerator:
             "filename/timestamp_position", "after", type=str
         )
         separator = settings.value("filename/separator", "_", type=str)
-        keep_old_suffixes = False
 
-        # NEU: Benutzername in Suffixen
-        use_username = settings.value("filename/use_username_in_suffix", False, type=bool)
+        use_username = settings.value(
+            "filename/use_username_in_suffix", False, type=bool
+        )
         username = settings.value("filename/username", "", type=str)
+        username_position = settings.value(
+            "filename/username_position", "suffix", type=str
+        )
+        accumulate_usernames = settings.value(
+            "filename/accumulate_usernames", False, type=bool
+        )
+        known_usernames = settings.value(
+            "filename/known_usernames", [], type=list
+        )
+        if not isinstance(known_usernames, list):
+            known_usernames = []
 
-        # Basisnamen ermitteln
+        # -------- Basisnamen ermitteln --------
         if base_name is None and pdf_path:
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
         elif base_name is None:
@@ -2907,50 +3170,109 @@ class FilenameGenerator:
         else:
             base_name = os.path.splitext(base_name)[0]
 
+        # -------- Timestamp berechnen --------
         timestamp_str = ""
         if update_timestamp:
             base_name = re.sub(r"[\d\-_\.:]{8,}", "", base_name)
             base_name = re.sub(r"_{2,}", "_", base_name).strip("_")
+            base_name = re.sub(r" {2,}", " ", base_name).strip(" ")
             if use_timestamp and timestamp_format:
                 try:
                     timestamp_str = datetime.now().strftime(timestamp_format)
-                except:
+                except Exception:
                     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        if not keep_old_suffixes and suffixes:
-            for suf in suffixes:
-                if suf:
-                    suf_clean = suf.lstrip("_")
-                    base_name = re.sub(
-                        r"_{}".format(re.escape(suf_clean)), "", base_name
-                    )
-                    base_name = re.sub(
-                        r"{}".format(re.escape(suf_clean)), "", base_name
-                    )
-            base_name = re.sub(r"_+", "_", base_name).strip("_")
+        # -------- Suffix-Liste normalisieren --------
+        suffixes_list = []
+        if suffixes:
+            if isinstance(suffixes, str):
+                suffixes_list = [suffixes]
+            else:
+                suffixes_list = [s for s in suffixes if s]
 
+        # ===== Namens-Extraktion über den Suffix-Marker =====
+        # Prinzip: Der Suffix (z.B. 'mit_Unterschrift') markiert das Ende des
+        # echten Basisnamens. Alles RECHTS davon ist Namenskette.
+        # Das funktioniert geräteunabhängig, weil known_usernames nicht nötig ist.
+        extracted_names = []
+
+        if suffixes_list:
+            # Schritt A: Suffix finden → links=Basisname, rechts=Namen
+            base_name, names_from_suffix = cls._extract_names_after_suffix(
+                base_name, suffixes_list
+            )
+
+            if use_username and accumulate_usernames:
+                extracted_names.extend(names_from_suffix)
+
+                # Schritt B: Fallback – falls im linken Teil noch Namen stehen,
+                # die wir kennen (typisch wenn derselbe User mehrfach speichert)
+                if known_usernames:
+                    base_name, trailing = cls._extract_trailing_usernames(
+                        base_name, known_usernames
+                    )
+                    for n in trailing:
+                        if n not in extracted_names:
+                            extracted_names.append(n)
+
+            # Sicherheitshalber: Basisname trimmen
+            base_name = base_name.strip("_ ") or "dokument"
+
+        # ===== Namen deduplizieren + aktuellen User hinzufügen =====
+        all_names = []
+        if use_username and username:
+            for n in extracted_names:
+                if n and n not in all_names:
+                    all_names.append(n)
+            if username not in all_names:
+                all_names.append(username)
+
+        # -------- Debug --------
+        print(
+            f"[FilenameGenerator] position={username_position}, "
+            f"accumulate={accumulate_usernames}, separator='{separator}'"
+        )
+        print(f"[FilenameGenerator] base_name (clean)='{base_name}'")
+        print(f"[FilenameGenerator] extracted_names={extracted_names}")
+        print(f"[FilenameGenerator] all_names={all_names}")
+
+        # ===== Parts zusammenbauen =====
         parts = []
+
         if timestamp_position == "before" and timestamp_str:
             parts.append(timestamp_str)
+
         parts.append(base_name)
+
+        # Basisname-Modus: Namen VOR den Suffixen
+        if use_username and all_names and username_position == "before_timestamp":
+            if separator == "_":
+                parts.extend(all_names)
+            else:
+                # Marker "_" pro Name → klar unterscheidbar vom Basisnamen
+                parts.extend(["_" + n for n in all_names])
+
         if timestamp_position == "after" and timestamp_str:
             parts.append(timestamp_str)
 
-        if suffixes:
-            if isinstance(suffixes, str):
-                suffixes = [suffixes]
-
-            for suf in suffixes:
-                if suf:
-                    suf_clean = suf.lstrip("_")
-                    if use_username and username:
-                        parts.append(f"{suf_clean}_{username}")
-                    else:
-                        parts.append(suf_clean)
+        # Suffixe – im Suffix-Modus hängen die Namen am LETZTEN Suffix
+        if suffixes_list:
+            for i, suf in enumerate(suffixes_list):
+                suf_clean = suf.lstrip("_")
+                is_last = i == len(suffixes_list) - 1
+                if (
+                    use_username
+                    and all_names
+                    and username_position == "suffix"
+                    and is_last
+                ):
+                    suf_clean = suf_clean + "_" + "_".join(all_names)
+                parts.append(suf_clean)
 
         if timestamp_position == "end" and timestamp_str:
             parts.append(timestamp_str)
 
+        # -------- Zusammenfügen --------
         if separator == "_":
             filename = "_".join(parts)
             filename = re.sub(r"_+", "_", filename)
@@ -2960,18 +3282,17 @@ class FilenameGenerator:
         else:
             filename = "".join(parts)
 
+        # -------- Geschützt-Suffix --------
         if is_protected:
-            protected_suffix = QSettings("BinhDiez", "PDFDarkView").value(
-                "protected_suffix", "_geschützt"
-            )
+            protected_suffix = settings.value("protected_suffix", "_geschützt")
             if use_username and username:
-                protected_with_username = f"{protected_suffix.lstrip('_')}_{username}"
+                prot_with_user = f"{protected_suffix.lstrip('_')}_{username}"
                 if separator == "_":
-                    filename = f"{filename}_{protected_with_username}"
+                    filename = f"{filename}_{prot_with_user}"
                 elif separator == " ":
-                    filename = f"{filename} {protected_with_username}"
+                    filename = f"{filename} {prot_with_user}"
                 else:
-                    filename = f"{filename}{protected_with_username}"
+                    filename = f"{filename}{prot_with_user}"
             else:
                 if separator == "_":
                     filename = f"{filename}_{protected_suffix.lstrip('_')}"
@@ -2979,6 +3300,25 @@ class FilenameGenerator:
                     filename = f"{filename} {protected_suffix.lstrip('_')}"
                 else:
                     filename = f"{filename}{protected_suffix.lstrip('_')}"
+
+        # -------- known_usernames aktualisieren --------
+        if use_username and username:
+            current = settings.value(
+                "filename/known_usernames", [], type=list
+            )
+            if not isinstance(current, list):
+                current = []
+            # Auch die über Suffix-Marker extrahierten Namen eintragen
+            # → beim nächsten Speichern sind sie lokal bekannt
+            for n in extracted_names:
+                if n and n not in current:
+                    current.append(n)
+            if username not in current:
+                current.append(username)
+            if len(current) > 100:
+                current = current[-100:]
+            settings.setValue("filename/known_usernames", current)
+            settings.sync()
 
         filename += ".pdf"
         directory = os.path.dirname(pdf_path) if pdf_path else os.getcwd()
@@ -49064,6 +49404,42 @@ class PDFViewer(QMainWindow):
             update_timestamp=update_timestamp,
         )
 
+    ### NEU: Quelldatei nach erfolgreichem Speichern löschen
+    def _finalize_save_delete_source(self, new_file_path):
+        """
+        Löscht die Quelldatei (self.pdf_path) nach erfolgreichem Speichern,
+        wenn die Option 'filename/delete_source_after_save' aktiv ist.
+        Sicherheitsprüfungen verhindern versehentliches Löschen.
+        """
+        try:
+            settings = QSettings("BinhDiez", "PDFDarkView")
+            if not settings.value(
+                "filename/delete_source_after_save", False, type=bool
+            ):
+                return
+
+            src = getattr(self, "pdf_path", None)
+            if not src or not os.path.exists(src):
+                return
+
+            # Nichts tun, wenn Quelle == Ziel (Overwrite-Fall)
+            try:
+                if os.path.abspath(src) == os.path.abspath(new_file_path):
+                    return
+            except Exception:
+                return
+
+            # Sicherheitsnetz: Nur PDF-Dateien löschen
+            if not src.lower().endswith(".pdf"):
+                print(f"WARN: Quelldatei ist keine PDF – nicht gelöscht: {src}")
+                return
+
+            os.remove(src)
+            print(f"DEBUG: Quelldatei gelöscht: {src}")
+
+        except Exception as e:
+            print(f"FEHLER beim Löschen der Quelldatei: {e}")
+
     ### 4. POSITION Für Sprung nach NEULADEN
     def _save_position_for_reload(self, item, final_path, target_page, element_type):
         """
@@ -49079,6 +49455,9 @@ class PDFViewer(QMainWindow):
     ):
         """Lädt PDF neu und scrollt zur Position – ohne Timer, mit Callback."""
         try:
+            # >>> NEU: Quelldatei löschen, wenn aktiviert (Sicherheitsnetz)
+            self._finalize_save_delete_source(pdf_path)
+
             print(f"\n=== PDF NEU LADEN - ZIELSEITE: {target_page + 1} ===")
             self._cleanup_all_modes()
             self.pdf_path = pdf_path
