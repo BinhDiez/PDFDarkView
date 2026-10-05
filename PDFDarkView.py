@@ -27638,6 +27638,9 @@ class FullPageWatermarkRenderer:
             doc.close()
             shutil.move(temp_path, final_path)
 
+            # >>> OPTION: Quelldatei löschen, wenn aktiviert
+            self._finalize_save_delete_source(final_path)
+
             if hasattr(parent, "current_password") and parent.current_password:
                 PDFPasswordManager.save_password(final_path, parent.current_password)
 
@@ -47338,6 +47341,9 @@ class PDFViewer(QMainWindow):
 
                     shutil.move(temp_path, final_path)
 
+                    # >>> OPTION: Quelldatei löschen, wenn aktiviert
+                    self._finalize_save_delete_source(final_path)
+
                     original_name = os.path.basename(self.pdf_path)
                     ocr_name = os.path.basename(final_path)
 
@@ -49404,7 +49410,8 @@ class PDFViewer(QMainWindow):
             update_timestamp=update_timestamp,
         )
 
-    ### NEU: Quelldatei nach erfolgreichem Speichern löschen
+    ### Option im Dateinamen Dialog:
+    ### Quelldatei nach erfolgreichem Speichern löschen
     def _finalize_save_delete_source(self, new_file_path):
         """
         Löscht die Quelldatei (self.pdf_path) nach erfolgreichem Speichern,
@@ -49455,7 +49462,7 @@ class PDFViewer(QMainWindow):
     ):
         """Lädt PDF neu und scrollt zur Position – ohne Timer, mit Callback."""
         try:
-            # >>> NEU: Quelldatei löschen, wenn aktiviert (Sicherheitsnetz)
+            # >>> OPTION: Quelldatei löschen, wenn aktiviert (Sicherheitsnetz)
             self._finalize_save_delete_source(pdf_path)
 
             print(f"\n=== PDF NEU LADEN - ZIELSEITE: {target_page + 1} ===")
@@ -53050,6 +53057,9 @@ class PDFViewer(QMainWindow):
             shutil.move(temp_path, final_path)
             print(f"DEBUG: Move nach {final_path} abgeschlossen")
 
+            # >>> OPTION: Quelldatei löschen, wenn aktiviert
+            self._finalize_save_delete_source(final_path)
+
             # Passwort für die neue Datei speichern
             if hasattr(self, "current_password") and self.current_password:
                 PDFPasswordManager.save_password(final_path, self.current_password)
@@ -54331,6 +54341,7 @@ class PDFViewer(QMainWindow):
                         f"scale_factor={scale_factor:.4f}, scaled_font={scaled_font_size:.2f} pt"
                     )
 
+
             # ========== 4. SPEICHERN ==========
             target_path = self.generate_custom_filename(
                 suffixes=[self.tr("filename_with_signature")]
@@ -54359,6 +54370,9 @@ class PDFViewer(QMainWindow):
             if not (hasattr(self, "current_doc") and doc is self.current_doc):
                 doc.close()
             shutil.move(temp_path, final_path)
+
+            # >>> OPTION: Quelldatei löschen, wenn aktiviert
+            self._finalize_save_delete_source(final_path)
 
             if hasattr(self, "current_password") and self.current_password:
                 PDFPasswordManager.save_password(final_path, self.current_password)
@@ -58030,6 +58044,10 @@ class PDFViewer(QMainWindow):
             doc.close()
 
             shutil.move(temp_path, final_path)
+
+            # >>> OPTION: Quelldatei löschen, wenn aktiviert
+            self._finalize_save_delete_source(final_path)
+
             if hasattr(self, "current_password") and self.current_password:
                 PDFPasswordManager.save_password(final_path, self.current_password)
 
