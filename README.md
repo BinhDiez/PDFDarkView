@@ -372,6 +372,34 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 <details>
 <summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
+## Version 2.6.1
+
+### Dateinamen-Verwaltung & Speicherverhalten
+
+### Neu
+
+- Quelldatei nach dem Speichern löschen (optional)
+- Neue Auswahl „Position" für den Benutzernamen im Suffix:
+- Neue Option „Namen aus vorheriger Datei übernehmen" 
+- Bearbeitung von PW geschützten Dokumenten mit anschließender Wiederverschlüsselung
+- Metadaten werden bei allen Änderungen ergänzt
+
+⚠️ Hinweise für Anwender
+
+· Die Option „Quelldatei nach dem Speichern löschen" sollte nur in Kombination mit deaktiviertem Backup verwendet werden. Sonst entsteht bei jedem Speichervorgang zusätzlich eine Backup-Datei, was dem Ziel der Bereinigung widerspricht.
+· Die Option „Namen aus vorheriger Datei übernehmen" funktioniert nur zuverlässig, wenn der Separator nicht auf „kein Trennzeichen" gesetzt ist.
+· Bei erstmaliger Nutzung der Akkumulations-Funktion werden noch keine Vorgängernamen erkannt – die Liste filename/known_usernames füllt sich ab der ersten Speicherung mit aktivierter Option.
+
+🧪 Bekannte Einschränkungen
+
+· Auf Netzwerkfreigaben kann das Löschen der Quelldatei fehlschlagen (z. B. bei geöffneten Handles durch andere Anwendungen). Fehler werden geloggt, der Speichervorgang läuft weiter.
+· Die Akkumulations-Funktion ist derzeit auf die Erkennung von Benutzernamen am Ende des Basisnamens beschränkt – Namen in der Mitte des Dateinamens werden nicht erkannt.
+
+### Verbesserungen
+
+- Robustere Erkennung der verwendbaren Stimmen für die ergänzende Sprachausgabe (Mac only)
+- kleinere BugFixes
+
 ## Version 2.5.1
 
 ### Neu
