@@ -3494,19 +3494,12 @@ class FilenameGenerator:
     ):
         """
         Generiert einen Dateinamen mit folgender Struktur:
-            [Base] [geschützt] [suffix1_suffix2_..._suffixN] [user1_..._userM]
+            [ts_before] Base [Users?] [ts_after] [Chain: protected+suffixes+Users?] [ts_end]
 
-        WICHTIG:
-        - Zwischen Base und Kette steht der konfigurierte Separator.
-        - INNERHALB der Kette (Suffixe + Username + geschützt) wird IMMER
-        "_" verwendet, damit der komplette Block mit Doppelklick markierbar
-        und löschbar ist.
-        - Alte Suffixe werden sprachunabhängig erkannt (via
-        _get_all_suffix_translations), damit beim Sprachwechsel keine
-        Suffix-Mischungen entstehen.
-        - clean_base_name() läuft als zweite Stufe und entfernt Reste,
-        die der Parser nicht erkannt hat.
-        - "Kopie"/"Copy" sind KEINE Action-Suffixe und bleiben im Base.
+        - Bei username_position='before_timestamp': User stehen NACH dem Base
+        und VOR der Suffix-Chain.
+        - Bei username_position='suffix': User stehen AM ENDE der Suffix-Chain.
+        - User werden niemals doppelt eingefügt.
         """
         settings = QSettings("BinhDiez", "PDFDarkView")
         use_timestamp = settings.value("filename/use_timestamp", True, type=bool)
@@ -3541,10 +3534,7 @@ class FilenameGenerator:
         if not isinstance(protected_suffix_raw, str) or not protected_suffix_raw:
             protected_suffix_raw = _PROTECTED_MARKER_SETTING
         protected_clean = protected_suffix_raw.lstrip("_") or _PROTECTED_MARKER_CLEAN
-
-        # Kette wird INTERN immer mit "_" verbunden – also Marker normalisieren
         protected_clean = cls._normalize_for_separator(protected_clean, "_")
-
         protected_markers = [protected_clean] + _PROTECTED_MARKER_ALIASES
 
         # -------- Dateinamen ermitteln --------
@@ -3558,9 +3548,6 @@ class FilenameGenerator:
         # -------- Timestamp-Reinigung --------
         if update_timestamp:
             original_name = re.sub(r"[\d\-_\.:]{8,}", "", original_name)
-            # FIX: Nur echte Whitespace normalisieren – NICHT Underscores!
-            # Underscores bleiben im Originalnamen, damit der Parser sie als
-            # Trennzeichen erkennen kann ("co_ChuKy" != "co ChuKy").
             original_name = re.sub(r"\s+", " ", original_name).strip()
             if use_timestamp and timestamp_format:
                 try:
@@ -3583,7 +3570,6 @@ class FilenameGenerator:
 
         # -------- Sprachunabhängige Suffix-Liste für den Parser --------
         language_independent = list(cls._get_all_suffix_translations())
-        # NEU: Persistierte Suffixe aus QSettings
         persisted_suffixes = settings.value(
             "filename/known_action_suffixes", [], type=list
         )
@@ -3622,15 +3608,20 @@ class FilenameGenerator:
                 if s.lstrip("_").lower() not in _strip_lower
             ]
 
-        # -------- Usernames zusammenstellen --------
+        # -------- Usernames zusammenstellen + DEDUP --------
         if accumulate_usernames:
             existing_users = list(parsed["usernames"])
         else:
             existing_users = []
 
-        combined_users = list(existing_users)
-        if use_username and username and username not in combined_users:
-            combined_users.append(username)
+        # FIX: User-Liste eindeutig machen (Reihenfolge bleibt).
+        # Der Parser kann bei alten Dateien Duplikate geliefert haben.
+        _seen_users = set()
+        combined_users = []
+        for u in list(existing_users) + ([username] if (use_username and username) else []):
+            if u and u not in _seen_users:
+                _seen_users.add(u)
+                combined_users.append(u)
 
         # -------- Suffixe zusammenstellen --------
         combined_suffixes = list(existing_suffixes)
@@ -3638,11 +3629,7 @@ class FilenameGenerator:
             if s not in combined_suffixes:
                 combined_suffixes.append(s)
 
-        # =====================================================================
-        # FIX: Kette INTERN immer mit "_" – unabhängig vom Separator.
-        # Dadurch bleibt die Kette ein zusammenhängender Block, der per
-        # Doppelklick markiert und gelöscht werden kann.
-        # =====================================================================
+        # -------- Kette normalisieren (immer "_" intern) --------
         norm_suffixes = [
             cls._normalize_for_separator(s, "_") for s in combined_suffixes
         ]
@@ -3661,21 +3648,16 @@ class FilenameGenerator:
         print(f"[FilenameGenerator] has_protected={has_protected}")
         print(f"[FilenameGenerator] existing_suffixes={existing_suffixes}")
         print(f"[FilenameGenerator] combined_suffixes={combined_suffixes}")
-        print(f"[FilenameGenerator] norm_suffixes={norm_suffixes}")
         print(f"[FilenameGenerator] combined_users={combined_users}")
-        print(f"[FilenameGenerator] norm_users={norm_users}")
 
-        # -------- Kette bauen (immer "_" intern) --------
-        chain_parts = []
-        if has_protected:
-            chain_parts.append(protected_clean)
-        chain_parts.extend(norm_suffixes)
-        chain_parts.extend(norm_users)
-        chain = "_".join(chain_parts)
+        # =====================================================================
+        # FIX: User nur an EINER Stelle einfügen.
+        #   - "before_timestamp" → User zwischen Base und Kette
+        #   - "suffix"           → User am Ende der Kette
+        # =====================================================================
+        users_in_chain = (username_position != "before_timestamp")
 
         # -------- Parts zusammenbauen --------
-        # out_parts werden später mit dem KONFIGURIERTEN Separator verbunden.
-        # Das trennt Base / Kette / Timestamp sauber.
         out_parts = []
 
         if timestamp_position == "before" and timestamp_str:
@@ -3683,16 +3665,21 @@ class FilenameGenerator:
 
         out_parts.append(base_clean)
 
-        # Basisname-Modus: User direkt nach Base (bleibt als eigene Parts)
-        if (
-            use_username
-            and norm_users
-            and username_position == "before_timestamp"
-        ):
+        # User direkt nach Base (NUR im before_timestamp-Modus)
+        if use_username and norm_users and not users_in_chain:
             out_parts.extend(norm_users)
 
         if timestamp_position == "after" and timestamp_str:
             out_parts.append(timestamp_str)
+
+        # Kette bauen – protected + suffixes + (users wenn suffix-Modus)
+        chain_parts = []
+        if has_protected:
+            chain_parts.append(protected_clean)
+        chain_parts.extend(norm_suffixes)
+        if users_in_chain:
+            chain_parts.extend(norm_users)
+        chain = "_".join(chain_parts)
 
         if chain:
             out_parts.append(chain)
@@ -3701,8 +3688,6 @@ class FilenameGenerator:
             out_parts.append(timestamp_str)
 
         # -------- Zusammenfügen --------
-        # Hier wird der KONFIGURIERTE Separator verwendet – nur ZWISCHEN
-        # den Blöcken. Innerhalb der Kette bleibt "_" erhalten.
         if separator == "_":
             filename = "_".join(out_parts)
             filename = re.sub(r"_+", "_", filename)
@@ -3719,16 +3704,13 @@ class FilenameGenerator:
             )
             if not isinstance(current, list):
                 current = []
-            for n in parsed["usernames"] + [username]:
+            for n in combined_users:
                 if n and n not in current:
                     current.append(n)
             if len(current) > 100:
                 current = current[-100:]
             settings.setValue("filename/known_usernames", current)
             settings.sync()
-
-        filename += ".pdf"
-        directory = os.path.dirname(pdf_path) if pdf_path else os.getcwd()
 
         # -------- Neue Suffixe persistent speichern --------
         try:
@@ -3750,7 +3732,10 @@ class FilenameGenerator:
         except Exception as e:
             print(f"[FilenameGenerator] Warnung Persist: {e}")
 
+        filename += ".pdf"
+        directory = os.path.dirname(pdf_path) if pdf_path else os.getcwd()
         return os.path.join(directory, filename)
+
 
     @classmethod
     def _get_all_suffix_translations(cls):
