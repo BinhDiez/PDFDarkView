@@ -3442,7 +3442,26 @@ Tip: You can adjust settings in the context menu.
         "save_success_destructive":    "Saved: {0}\nThe original file was not modified.",
 
         # ============================================
-        # 112. QUIT PROGRAM
+        # 112. ABBRUCH WENN VERSCHLÜSSELT
+        # ============================================
+        "merge_encrypted_title": "Encrypted PDF not allowed",
+        "merge_encrypted_not_allowed": "The following PDFs are encrypted and were not added:",
+        "merge_encrypted_hint": "Please remove the protection from these files first (Menu \"File → Protect PDF\" or with an external tool) and try again.",
+        "merge_encrypted_file": "File is encrypted: {0}",
+
+        # ============================================
+        # 113. OCR Fortschritt neu ergänzt
+        # ============================================
+        "ocr_status_preparing": "Preparing PDF...",
+        "ocr_status_rasterizing": "Rasterizing...",
+        "ocr_status_recognizing": "Recognizing text...",
+        "ocr_status_grafting": "Embedding text...",
+        "ocr_status_optimizing": "Optimizing...",
+        "ocr_status_postprocessing": "Post-processing...",
+        "ocr_status_done": "OCR complete",
+
+        # ============================================
+        # 114. QUIT PROGRAM
         # ============================================
         "app_quitting": "Quitting program",
 

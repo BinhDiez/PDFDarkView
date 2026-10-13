@@ -1395,12 +1395,12 @@ Tipp: Im Kontextmenü können Sie die Einstellungen anpassen.
         # ============================================
         'edit_search': "&Suchen",
         'edit_ocr': " OCR durchführen",
-        'edit_rotate': "Seite &drehen",
+        'edit_rotate': "Seite drehen",
         'edit_rotate_all': "&Alle Seiten drehen",
-        'edit_delete_pages': "Seiten &löschen",
-        'edit_extract_pages': "Seiten &entnehmen",
-        'edit_insert_pages': "Seiten &einfügen",
-        'edit_move_pages': "Seiten &verschieben",
+        'edit_delete_pages': "Seiten löschen",
+        'edit_extract_pages': "Seiten entnehmen",
+        'edit_insert_pages': "Seiten einfügen",
+        'edit_move_pages': "Seiten verschieben",
 
         # ============================================
         # 41. TEXT-MENÜ
@@ -3500,7 +3500,26 @@ Tipp: Im Kontextmenü können Sie die Einstellungen anpassen.
         ),
 
         # ============================================
-        # 112. PROGRAMM BEENDEN
+        # 112. ABBRUCH WENN VERSCHLÜSSELT
+        # ============================================
+        "merge_encrypted_title": "Geschützte PDF nicht erlaubt",
+        "merge_encrypted_not_allowed": "Folgende PDFs sind verschlüsselt und wurden nicht hinzugefügt:",
+        "merge_encrypted_hint": "Bitte entfernen Sie zuerst den Schutz dieser Dateien (Menü „Datei → PDF schützen“ bzw. mit einem externen Tool) und versuchen Sie es erneut.",
+        "merge_encrypted_file": "Datei ist verschlüsselt: {0}",
+
+        # ============================================
+        # 113. OCR Fortschritt neu ergänzt
+        # ============================================
+        "ocr_status_preparing": "PDF wird vorbereitet...",
+        "ocr_status_rasterizing": "Bildoptimierung läuft...",
+        "ocr_status_recognizing": "Texterkennung in Arbeit...",
+        "ocr_status_grafting": "Text wird eingebettet...",
+        "ocr_status_optimizing": "Optimierung läuft...",
+        "ocr_status_postprocessing": "Nachbearbeitung läuft...",
+        "ocr_status_done": "OCR abgeschlossen",
+
+        # ============================================
+        # 114. PROGRAMM BEENDEN
         # ============================================
         "app_quitting": "Programm wird beendet",
 

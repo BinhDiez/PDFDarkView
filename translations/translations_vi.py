@@ -3438,7 +3438,26 @@ Mẹo: Bạn có thể điều chỉnh cài đặt trong menu ngữ cảnh.
         "save_success_destructive":    "Đã lưu: {0}\nTệp gốc không bị thay đổi.",
 
         # ============================================
-        # 112. THOÁT CHƯƠNG TRÌNH
+        # 112. ABBRUCH WENN VERSCHLÜSSELT
+        # ============================================
+        "merge_encrypted_title": "Không cho phép PDF được mã hóa",
+        "merge_encrypted_not_allowed": "Các tệp PDF sau đây đã được mã hóa và không được thêm vào:",
+        "merge_encrypted_hint": "Vui lòng xóa bảo vệ của các tệp này trước (Menu \"Tệp → Bảo vệ PDF\" hoặc bằng công cụ bên ngoài) rồi thử lại.",
+        "merge_encrypted_file": "Tệp đã được mã hóa: {0}",
+
+        # ============================================
+        # 113. OCR Fortschritt neu ergänzt
+        # ============================================
+        "ocr_status_preparing": "Đang chuẩn bị PDF...",
+        "ocr_status_rasterizing": "Đang raster hóa...",
+        "ocr_status_recognizing": "Đang nhận dạng văn bản...",
+        "ocr_status_grafting": "Đang nhúng văn bản...",
+        "ocr_status_optimizing": "Đang tối ưu hóa...",
+        "ocr_status_postprocessing": "Đang xử lý hậu kỳ...",
+        "ocr_status_done": "OCR hoàn tất",
+
+        # ============================================
+        # 114. THOÁT CHƯƠNG TRÌNH
         # ============================================
         "app_quitting": "Đang thoát chương trình",
 

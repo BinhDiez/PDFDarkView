@@ -63,6 +63,7 @@ import weakref
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from multiprocessing import Process
+from contextlib import contextmanager
 
 # Drittanbietermodule
 import fitz  # PyMuPDF
@@ -206,22 +207,103 @@ from PyQt5.QtGui import (
 ### AKTUELLE PROGRAMM-VERSION
 ### = GitHub‑Release‑Tag (ohne führendes 'v')
 ### ====================================================
-APP_VERSION = "2.5.1"
+APP_VERSION = "2.6.1"
 
 # ACHTUNG: nur als PW geschütztes ZIP auf GitHub hochladen
 
 """ Changelog:
-        2.4.5
+
+
+    2.6.1
+        ✨ Neu
+
+        Quelldatei nach dem Speichern löschen (optional )
+
+        · Neue Option „Quelldatei nach dem Speichern löschen" im Dateinamen-Einstellungsdialog.
+        · Ist die Option aktiv, wird nach erfolgreichem Speichern unter neuem Namen die zuvor geöffnete Ausgangsdatei automatisch entfernt.
+        · Dadurch bleibt – bei deaktiviertem Backup – immer nur die aktuellste Version im Ordner liegen.
+        · Betrifft alle Speichervorgänge, die eine neue Datei mit Suffix erzeugen (Signaturen, Texte/Kreuze, Bilder, Formen, Redactions, Seitenoperationen usw.).
+        · Der Selbstlöschungs-Fall (Quelldatei == Zieldatei, z. B. im Overwrite-Modus) wird abgefangen und führt zu keiner Löschung.
+        · Bei Speichern unter, Schützen und Export wird die Quelldatei bewusst nicht gelöscht.
+
+        Position der Benutzernamen im Dateinamen (optional)
+
+        · Neue Auswahl „Position" für den Benutzernamen im Suffix:
+        · Am Ende (im Suffix) – bisheriges Verhalten, z. B.:
+            Test_2024-06-15_143022_mit_Unterschrift_Müller.pdf
+        · Vor Zeitstempel (Sammelname) – neuer Modus, z. B.:
+            Test_Müller_Meier_Schulze_2024-06-15_143022_mit_Unterschrift.pdf
+        · Neue Option „Namen aus vorheriger Datei übernehmen" (nur im Sammelname-Modus aktiv):
+        · Bereits im Dateinamen enthaltene Benutzernamen werden erkannt und vor den neuen Namen gesetzt.
+        · So entsteht bei mehrfacher Unterschrift eine fortlaufende Namenskette, z. B.:
+            Test_Müller_Meier_Schulze_Mustermann_Nocheiner_2024-06-15_143022_mit_Unterschrift.pdf
+        · Erkennung erfolgt nur über eine gepflegte Liste bekannter Benutzernamen (filename/known_usernames), um Verwechslungen mit dem Dokumentnamen auszuschließen.
+        · Nur vollständige Tokens werden extrahiert (durch den eingestellten Separator getrennt) – keine Substring-Treffer.
+
+        🔧 Technische Änderungen
+
+        FilenameSettingsDialog
+
+        · Neue UI-Elemente: delete_source_cb (Quelldatei löschen), username_pos_combo (Position), accumulate_cb (Namen akkumulieren).
+        · update_preview() berücksichtigt alle neuen Optionen und zeigt einen Hinweis, wenn die Quelldatei gelöscht wird.
+        · Neue Hilfsmethode _update_username_controls() aktiviert/deaktiviert die Akkumulations-Checkbox abhängig von Position und Benutzernamen-Option.
+        · Die Option „Quelldatei löschen" ist nur im Modus „Neue Datei" aktiv (nicht bei „Überschreiben").
+
+        FilenameGenerator
+
+        · generate() vollständig überarbeitet:
+        · Unterstützt username_position = "suffix" (alt) und "before_timestamp" (neu).
+        · Nutzt _extract_trailing_usernames() zur Erkennung bereits vorhandener Namen am Ende des Basisnamens.
+        · Aktualisiert filename/known_usernames automatisch bei jedem Speichervorgang (max. 50 Einträge, FIFO).
+        · Zusätzliche Bereinigung mehrfacher Leerzeichen, wenn als Separator ein Leerzeichen verwendet wird.
+        · Neue Klassenmethode _extract_trailing_usernames() für robustes Token-Matching.
+
+        PDFViewer
+
+        · Neue zentrale Methode _finalize_save_delete_source(new_file_path):
+        · Prüft filename/delete_source_after_save in den QSettings.
+        · Löscht self.pdf_path, sofern die Datei existiert, es sich um eine PDF handelt und sie nicht identisch mit der Zieldatei ist.
+        · Alle Fehler werden nur geloggt, nie weitergereicht → kann den Speichervorgang nicht abbrechen.
+        · Sicherheitsnetz: Aufruf von _finalize_save_delete_source() zusätzlich am Anfang von _reload_pdf_after_save_with_position().
+        · Greift automatisch für alle Speichermethoden, die zum Abschluss neu laden.
+        · Doppelter Aufruf ist durch os.path.exists()-Check abgesichert.
+        · Alle Speichermethoden (_save_all_signatures, _save_all_texts_and_crosses, _save_all_images, _save_all_forms, _apply_all_redactions_and_save, Seitenoperationen usw.) rufen die neue Methode nach erfolgreichem Speichern auf.
+
+        Neue QSettings-Schlüssel
+
+        Schlüssel Typ Default Bedeutung
+        filename/delete_source_after_save bool False Quelldatei nach Speichern löschen
+        filename/username_position str "suffix" "suffix" oder "before_timestamp"
+        filename/accumulate_usernames bool False Namen aus Vorgängerdatei übernehmen
+        filename/known_usernames liststr [] Gepflegte Liste bekannter Benutzernamen
+
+        ⚠️ Hinweise für Anwender
+
+        · Die Option „Quelldatei nach dem Speichern löschen" sollte nur in Kombination mit deaktiviertem Backup verwendet werden. Sonst entsteht bei jedem Speichervorgang zusätzlich eine Backup-Datei, was dem Ziel der Bereinigung widerspricht.
+        · Die Option „Namen aus vorheriger Datei übernehmen" funktioniert nur zuverlässig, wenn der Separator nicht auf „kein Trennzeichen" gesetzt ist.
+        · Bei erstmaliger Nutzung der Akkumulations-Funktion werden noch keine Vorgängernamen erkannt – die Liste filename/known_usernames füllt sich ab der ersten Speicherung mit aktivierter Option.
+
+        ✅ Kompatibilität
+
+        · Bestehende Konfigurationen bleiben gültig. Alle neuen Optionen haben sinnvolle Defaults, die das bisherige Verhalten beibehalten.
+        · Keine Migration erforderlich.
+
+        🧪 Bekannte Einschränkungen
+
+        · Auf Netzwerkfreigaben kann das Löschen der Quelldatei fehlschlagen (z. B. bei geöffneten Handles durch andere Anwendungen). Fehler werden geloggt, der Speichervorgang läuft weiter.
+        · Die Akkumulations-Funktion ist derzeit auf die Erkennung von Benutzernamen am Ende des Basisnamens beschränkt – Namen in der Mitte des Dateinamens werden nicht erkannt.
+
+    2.5.1
         --> Neue Optionen im Dateinames SettingsDialog
         --> BugFix beim Speichern von Text unter Windows PyMuPDF
-        2.4.5 --> Lazy Importe
+    2.4.5 --> Lazy Importe
         --> Spracherkennung und Auswahl umstrukturiert
         --> BugFix OCR Test Timeout in langsamere Systemumgebungen
-        2.4.4 --> BugFix und weitere Zeitmessungen
+    2.4.4 --> BugFix und weitere Zeitmessungen
          --> Suffixe mit optionalem Benutzernamem
         2.4.3 --> Drucken unter Windows nutzt App aus Liste
         --> neue Sprache Esperanto
-        2.4.2 --> Startzeitverkürzung:
+    2.4.2 --> Startzeitverkürzung:
         Schnellerer Start im Netzwerk (Citrix) durch:
         shutil.which zuerst Kein Prozess-Start, nur schneller Systemaufruf
         Timeouts für subprocess.run Verhindert Blockaden von >2s pro Befehl
@@ -443,6 +525,239 @@ class TranslationsUpdateThread(QThread):
         except Exception as e:
             self.finished.emit(False, f"Fehler: {str(e)}", 0, 0)
 
+# =============================================================================
+# VOICE-HELPER (modulweit)
+# =============================================================================
+import subprocess
+import threading
+
+_VOICE_CACHE = {}
+_VOICE_CACHE_LOCK = threading.Lock()
+
+# Sprachcode → macOS-Locale-Präfix
+_LANG_LOCALE_PREFIX = {
+    "de": "de_", "en": "en_", "vi": "vi_", "ar": "ar_",
+    "es": "es_", "fr": "fr_", "it": "it_", "pt": "pt_",
+    "ru": "ru_", "zh": "zh_", "ja": "ja_", "ko": "ko_",
+    "nl": "nl_", "pl": "pl_", "tr": "tr_", "sv": "sv_",
+    "da": "da_", "no": "no_", "nb": "nb_", "fi": "fi_",
+    "cs": "cs_", "sk": "sk_", "hu": "hu_", "ro": "ro_",
+    "el": "el_", "he": "he_", "hi": "hi_", "th": "th_",
+    "id": "id_", "ms": "ms_", "uk": "uk_", "ca": "ca_",
+    "hr": "hr_", "bg": "bg_", "sr": "sr_", "sl": "sl_",
+    "lt": "lt_", "lv": "lv_", "et": "et_", "is": "is_",
+}
+
+# Bevorzugte Stimmen pro Sprache (macOS), Fallback ist Auto-Erkennung
+_PREFERRED_VOICES = {
+    "de": ["Anna", "Petra", "Helena", "Markus", "Yannick", "Martin"],
+    "en": ["Samantha", "Alex", "Daniel", "Karen", "Moira", "Tessa"],
+    "vi": ["Linh"],
+    "ar": ["Maged", "Tarik"],
+    "es": ["Monica", "Paulina", "Jorge", "Diego", "Juan", "Angelica"],
+    "fr": ["Amelie", "Audrey", "Aurelie", "Thomas"],
+    "it": ["Alice", "Luca"],
+    "pt": ["Luciana", "Felipe", "Joana"],
+    "ru": ["Milena", "Yuri"],
+    "zh": ["Ting-Ting", "Sin-ji", "Mei-Jia"],
+    "ja": ["Kyoko", "Otoya"],
+    "ko": ["Yuna"],
+    "nl": ["Xander", "Ellen"],
+    "pl": ["Zosia", "Krzysztof"],
+    "tr": ["Yelda", "Cem"],
+    "sv": ["Alva", "Oskar"],
+    "da": ["Sara", "Magnus"],
+    "no": ["Nora", "Henrik"],
+    "fi": ["Satu", "Onni"],
+    "cs": ["Zuzana", "Jakub"],
+    "hu": ["Mariska", "Tamas"],
+    "ro": ["Ioana", "Andrei"],
+    "el": ["Melina", "Nikos"],
+    "he": ["Carmit"],
+    "hi": ["Lekha"],
+    "th": ["Kanya"],
+    "id": ["Damayanti"],
+}
+
+
+def _get_macos_voices_for_lang(lang_code):
+    """Liste der verfügbaren macOS-Stimmen für einen Sprachcode (gecacht)."""
+    if not lang_code:
+        return []
+    lang_code = lang_code.lower().split("_")[0]
+
+    with _VOICE_CACHE_LOCK:
+        if lang_code in _VOICE_CACHE:
+            return _VOICE_CACHE[lang_code]
+
+    prefix = _LANG_LOCALE_PREFIX.get(lang_code, lang_code + "_")
+    result = []
+
+    try:
+        raw = subprocess.check_output(
+            ["say", "-v", "?"],
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        ).decode("utf-8", errors="replace")
+
+        available = {}
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            before_hash = line.split("#")[0].strip()
+            parts = before_hash.split()
+            if len(parts) < 2:
+                continue
+            locale = parts[-1]
+            name = " ".join(parts[:-1])
+            if name and locale:
+                available[name] = locale
+
+        for pref in _PREFERRED_VOICES.get(lang_code, []):
+            if pref in available and available[pref].startswith(prefix):
+                result.append(pref)
+
+        for name in sorted(available):
+            if available[name].startswith(prefix) and name not in result:
+                result.append(name)
+
+    except Exception as e:
+        print(f"[Voices] Fehler beim Ermitteln der Stimmen: {e}")
+
+    with _VOICE_CACHE_LOCK:
+        _VOICE_CACHE[lang_code] = result
+
+    print(f"[Voices] {lang_code} → {result[:5]} (insgesamt {len(result)})")
+    return result
+
+
+def _get_macos_best_voice(lang_code):
+    """Erste verfügbare macOS-Stimme für die Sprache oder None."""
+    voices = _get_macos_voices_for_lang(lang_code)
+    return voices[0] if voices else None
+
+
+def _clear_voice_cache():
+    """Cache leeren (z. B. nach Sprachwechsel)."""
+    with _VOICE_CACHE_LOCK:
+        _VOICE_CACHE.clear()
+
+
+def _detect_lang_code(obj):
+    """
+    Ermittelt den aktuellen Sprachcode aus einem beliebigen Objekt.
+    Sucht in dieser Reihenfolge:
+    1. obj.lang.current_lang
+    2. obj.lang.lang
+    3. obj.lang (falls selbst ein String)
+    4. obj.parent().lang.current_lang
+    5. obj.parent.lang.current_lang
+    6. Fallback: 'de'
+    """
+    # Direkter Zugriff
+    lang_obj = getattr(obj, "lang", None)
+    if lang_obj is not None:
+        if isinstance(lang_obj, str):
+            return lang_obj
+        code = getattr(lang_obj, "current_lang", None)
+        if code:
+            return code
+        code = getattr(lang_obj, "lang", None)
+        if code:
+            return code
+
+    # Über parent (Methode oder Attribut)
+    parent = getattr(obj, "parent", None)
+    if parent is not None:
+        if callable(parent):
+            try:
+                parent = parent()
+            except Exception:
+                parent = None
+        if parent is not None:
+            plang = getattr(parent, "lang", None)
+            if plang is not None:
+                if isinstance(plang, str):
+                    return plang
+                code = getattr(plang, "current_lang", None)
+                if code:
+                    return code
+
+    return "de"
+
+
+def _speak_message(message, lang_code, rate=175, engine_holder=None):
+    """
+    Zentrale Sprachausgabe für macOS und Windows/Linux.
+    engine_holder: optionales Objekt mit Attribut '_say_process'.
+    """
+    if not message:
+        return
+
+    if platform.system() == "Darwin":
+        # Vorherigen Prozess beenden
+        if engine_holder is not None:
+            old = getattr(engine_holder, "_say_process", None)
+            if old is not None:
+                try:
+                    if old.poll() is None:
+                        old.terminate()
+                except Exception:
+                    pass
+                engine_holder._say_process = None
+
+        cmd = ["say", "-r", str(rate)]
+        voice = _get_macos_best_voice(lang_code)
+        if voice:
+            cmd += ["-v", voice]
+        cmd.append(message)
+
+        print(f"[say] lang={lang_code}, voice={voice}, rate={rate}")
+
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            if engine_holder is not None:
+                engine_holder._say_process = proc
+        except FileNotFoundError:
+            print("[say] 'say'-Befehl nicht gefunden")
+    else:
+        # Windows / Linux
+        try:
+            import pyttsx3
+            engine = pyttsx3.init()
+            engine.setProperty("rate", rate)
+            try:
+                voices = engine.getProperty("voices") or []
+                prefix = lang_code.lower().split("_")[0]
+                chosen = None
+                for v in voices:
+                    langs = getattr(v, "languages", []) or []
+                    ids = getattr(v, "id", "") or ""
+                    name = getattr(v, "name", "") or ""
+                    blob = " ".join([
+                        str(ids), str(name),
+                        " ".join(
+                            l.decode("utf-8", errors="ignore")
+                            if isinstance(l, (bytes, bytearray)) else str(l)
+                            for l in langs
+                        ),
+                    ]).lower()
+                    if prefix in blob:
+                        chosen = v.id
+                        break
+                if chosen:
+                    engine.setProperty("voice", chosen)
+            except Exception as e:
+                print(f"[say] pyttsx3 Stimmenwahl: {e}")
+            engine.say(message)
+            engine.runAndWait()
+        except Exception as e:
+            print(f"[say] pyttsx3 Fehler: {e}")
 
 ###===================================
 ### Plattformspezifische Einstellungen
@@ -3044,6 +3359,18 @@ class FilenameSettingsDialog(QDialog):
         super().accept()
 
 
+# ============================================================
+# Fester Marker für verschlüsselte PDFs (bewusst nicht übersetzt)
+# ============================================================
+# Der Marker wird im Dateinamen direkt nach dem Basisnamen eingefügt.
+# Beispiel: "Test_🔒_Meier.pdf" bedeutet: Datei ist verschlüsselt.
+# Bei Entschlüsselung wird der Marker einfach entfernt.
+_PROTECTED_MARKER_SETTING = "_🔒"          # Setting-Wert (mit Unterstrich)
+_PROTECTED_MARKER_CLEAN = "🔒"             # Marker ohne Unterstrich (Join-Form)
+_PROTECTED_MARKER_ALIASES = [              # Alte/alternative Marker für Rückwärtskompatibilität
+    "geschützt", "geschuetzt", "protected",
+]
+
 # mit Wörterbuchunterstützung
 class FilenameGenerator:
     """Zentrale Dateinamen-Generierung – Suffixe werden als Parameter übergeben (bereits übersetzt)."""
@@ -3051,42 +3378,54 @@ class FilenameGenerator:
     @classmethod
     def _extract_names_after_suffix(cls, base_name, suffixes_list):
         """
-        Sucht im base_name nach einem bekannten Suffix (z.B. 'mit_Unterschrift').
+        Sucht im base_name nach dem LINKESTEN bekannten Suffix-Marker.
         Alles RECHTS davon (durch _ oder Whitespace getrennt) wird als
-        Namenskette interpretiert und extrahiert.
-
-        Dies funktioniert GERÄTEUNABHÄNGIG, weil der Suffix als Marker dient
-        und nicht auf die lokale known_usernames-Liste angewiesen ist.
+        Namenskette interpretiert – Suffix-Marker werden aus der Namenskette
+        herausgefiltert.
 
         Gibt (base_name_links, liste_der_namen) zurück.
         """
         if not suffixes_list or not base_name:
             return base_name, []
 
+        # Alle Marker als eigenständige Token suchen; den linkesten nehmen
+        earliest_start = None
+        earliest_end = None
         for suf in suffixes_list:
             suf_clean = suf.lstrip("_")
-            # Suffix als eigenständiges Token (umgeben von _ / Whitespace / Rand)
-            pattern = r"(?:^|[_\s])" + re.escape(suf_clean) + r"(?:[_\s]|$)"
-            m = re.search(pattern, base_name)
-            if not m:
+            if not suf_clean:
                 continue
+            suf_parts = suf_clean.split("_")
+            suf_inner = r"[_\s]+".join(re.escape(p) for p in suf_parts)
+            pattern = r"(?:^|[_\s])" + suf_inner + r"(?:[_\s]|$)"
+            m = re.search(pattern, base_name)
+            if m and (earliest_start is None or m.start() < earliest_start):
+                earliest_start = m.start()
+                earliest_end = m.end()
 
-            before = base_name[: m.start()].rstrip("_ ")
-            after = base_name[m.end():].strip("_ ")
+        if earliest_start is None:
+            return base_name, []
 
-            names = []
-            if after:
-                tokens = [t for t in re.split(r"[_\s]+", after) if t]
-                # Timestamps / Zahlenreihen filtern
-                tokens = [
-                    t for t in tokens
-                    if not re.fullmatch(r"[\d\-\.:]+", t)
-                ]
-                names = tokens
+        before = base_name[:earliest_start].rstrip("_ ")
+        after = base_name[earliest_end:].strip("_ ")
 
-            return before, names
+        names = []
+        if after:
+            tokens = [t for t in re.split(r"[_\s]+", after) if t]
 
-        return base_name, []
+            # Filter: bekannte Suffix-Marker aus den Namen entfernen
+            suffix_lower = {
+                s.lstrip("_").lower() for s in suffixes_list if s
+            }
+            tokens = [
+                t for t in tokens
+                if t.lower() not in suffix_lower
+                and not re.fullmatch(r"[\d\-\.:]+", t)
+            ]
+            names = tokens
+
+        return before, names
+
 
     @classmethod
     def _extract_trailing_usernames(
@@ -3103,7 +3442,25 @@ class FilenameGenerator:
         if not known_usernames or not base_name:
             return base_name, []
 
-        known_set = {n for n in known_usernames if n}
+        # Bestimmte Wörter sind KEINE Benutzernamen, auch wenn sie es mal
+        # versehentlich in known_usernames geschafft haben
+        blocked = {
+            _PROTECTED_MARKER_CLEAN,                # "🔒"
+            "geschützt", "geschuetzt", "protected", # Alt-Aliase
+            "encrypted", "verschlüsselt",
+            "unencrypted", "unverschlüsselt",
+            "ocr", "OCR", "backup", "Backup",
+            "Kopie", "kopie", "copy", "Copy",
+            "mit_Unterschrift", "with_signature",
+            "mit_Text", "with_text",
+            "mit_Bildern", "with_images", "mit_Bild", "with_image",
+            "mit_Formen", "with_forms", "mit_Form", "with_form",
+            "mit", "Unterschrift", "alle", "Seiten", "gedreht",
+        }
+        known_set = {
+            n for n in known_usernames
+            if n and n not in blocked
+        }
         if not known_set:
             return base_name, []
 
@@ -3132,9 +3489,24 @@ class FilenameGenerator:
         suffixes=None,
         is_protected=False,
         update_timestamp=True,
+        strip_protection_marker=False,
+        strip_suffixes=None,
     ):
         """
-        Generiert einen Dateinamen basierend auf Benutzereinstellungen.
+        Generiert einen Dateinamen mit folgender Struktur:
+            [Base] [geschützt] [suffix1_suffix2_..._suffixN] [user1_..._userM]
+
+        WICHTIG:
+        - Zwischen Base und Kette steht der konfigurierte Separator.
+        - INNERHALB der Kette (Suffixe + Username + geschützt) wird IMMER
+        "_" verwendet, damit der komplette Block mit Doppelklick markierbar
+        und löschbar ist.
+        - Alte Suffixe werden sprachunabhängig erkannt (via
+        _get_all_suffix_translations), damit beim Sprachwechsel keine
+        Suffix-Mischungen entstehen.
+        - clean_base_name() läuft als zweite Stufe und entfernt Reste,
+        die der Parser nicht erkannt hat.
+        - "Kopie"/"Copy" sind KEINE Action-Suffixe und bleiben im Base.
         """
         settings = QSettings("BinhDiez", "PDFDarkView")
         use_timestamp = settings.value("filename/use_timestamp", True, type=bool)
@@ -3162,144 +3534,183 @@ class FilenameGenerator:
         if not isinstance(known_usernames, list):
             known_usernames = []
 
-        # -------- Basisnamen ermitteln --------
-        if base_name is None and pdf_path:
-            base_name = os.path.splitext(os.path.basename(pdf_path))[0]
-        elif base_name is None:
-            base_name = "dokument"
-        else:
-            base_name = os.path.splitext(base_name)[0]
+        # -------- Schutz-Marker-Set --------
+        protected_suffix_raw = settings.value(
+            "protected_suffix", _PROTECTED_MARKER_SETTING
+        )
+        if not isinstance(protected_suffix_raw, str) or not protected_suffix_raw:
+            protected_suffix_raw = _PROTECTED_MARKER_SETTING
+        protected_clean = protected_suffix_raw.lstrip("_") or _PROTECTED_MARKER_CLEAN
 
-        # -------- Timestamp berechnen --------
-        timestamp_str = ""
+        # Kette wird INTERN immer mit "_" verbunden – also Marker normalisieren
+        protected_clean = cls._normalize_for_separator(protected_clean, "_")
+
+        protected_markers = [protected_clean] + _PROTECTED_MARKER_ALIASES
+
+        # -------- Dateinamen ermitteln --------
+        if base_name is None and pdf_path:
+            original_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        elif base_name is None:
+            original_name = "dokument"
+        else:
+            original_name = os.path.splitext(base_name)[0]
+
+        # -------- Timestamp-Reinigung --------
         if update_timestamp:
-            base_name = re.sub(r"[\d\-_\.:]{8,}", "", base_name)
-            base_name = re.sub(r"_{2,}", "_", base_name).strip("_")
-            base_name = re.sub(r" {2,}", " ", base_name).strip(" ")
+            original_name = re.sub(r"[\d\-_\.:]{8,}", "", original_name)
+            # FIX: Nur echte Whitespace normalisieren – NICHT Underscores!
+            # Underscores bleiben im Originalnamen, damit der Parser sie als
+            # Trennzeichen erkennen kann ("co_ChuKy" != "co ChuKy").
+            original_name = re.sub(r"\s+", " ", original_name).strip()
             if use_timestamp and timestamp_format:
                 try:
                     timestamp_str = datetime.now().strftime(timestamp_format)
                 except Exception:
                     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+            else:
+                timestamp_str = ""
+        else:
+            timestamp_str = ""
 
-        # -------- Suffix-Liste normalisieren --------
+        # -------- Suffixe normalisieren --------
         suffixes_list = []
         if suffixes:
             if isinstance(suffixes, str):
                 suffixes_list = [suffixes]
             else:
-                suffixes_list = [s for s in suffixes if s]
+                suffixes_list = list(suffixes)
+        suffixes_list = [s.lstrip("_") for s in suffixes_list if s]
 
-        # ===== Namens-Extraktion über den Suffix-Marker =====
-        # Prinzip: Der Suffix (z.B. 'mit_Unterschrift') markiert das Ende des
-        # echten Basisnamens. Alles RECHTS davon ist Namenskette.
-        # Das funktioniert geräteunabhängig, weil known_usernames nicht nötig ist.
-        extracted_names = []
+        # -------- Sprachunabhängige Suffix-Liste für den Parser --------
+        language_independent = list(cls._get_all_suffix_translations())
+        # NEU: Persistierte Suffixe aus QSettings
+        persisted_suffixes = settings.value(
+            "filename/known_action_suffixes", [], type=list
+        )
+        if not isinstance(persisted_suffixes, list):
+            persisted_suffixes = []
 
-        if suffixes_list:
-            # Schritt A: Suffix finden → links=Basisname, rechts=Namen
-            base_name, names_from_suffix = cls._extract_names_after_suffix(
-                base_name, suffixes_list
-            )
+        all_known = list(set(
+            cls._all_known_action_suffixes()
+            + language_independent
+            + persisted_suffixes
+            + suffixes_list
+        ))
 
-            if use_username and accumulate_usernames:
-                extracted_names.extend(names_from_suffix)
+        # -------- Bestehenden Namen zerlegen --------
+        parsed = cls._parse_filename_into_parts(
+            original_name,
+            protected_markers=protected_markers,
+            known_suffixes=all_known,
+            known_usernames=known_usernames,
+        )
 
-                # Schritt B: Fallback – falls im linken Teil noch Namen stehen,
-                # die wir kennen (typisch wenn derselbe User mehrfach speichert)
-                if known_usernames:
-                    base_name, trailing = cls._extract_trailing_usernames(
-                        base_name, known_usernames
-                    )
-                    for n in trailing:
-                        if n not in extracted_names:
-                            extracted_names.append(n)
+        base_clean = parsed["base"]
+        has_protected = parsed["protected"] or is_protected
+        existing_suffixes = parsed["suffixes"]
 
-            # Sicherheitshalber: Basisname trimmen
-            base_name = base_name.strip("_ ") or "dokument"
+        # -------- Zweite Stufe: Sicherheitsnetz --------
+        base_clean = cls.clean_base_name(base_clean)
 
-        # ===== Namen deduplizieren + aktuellen User hinzufügen =====
-        all_names = []
-        if use_username and username:
-            for n in extracted_names:
-                if n and n not in all_names:
-                    all_names.append(n)
-            if username not in all_names:
-                all_names.append(username)
+        if strip_protection_marker:
+            has_protected = False
+
+        if strip_suffixes:
+            _strip_lower = {s.lstrip("_").lower() for s in strip_suffixes}
+            existing_suffixes = [
+                s for s in existing_suffixes
+                if s.lstrip("_").lower() not in _strip_lower
+            ]
+
+        # -------- Usernames zusammenstellen --------
+        if accumulate_usernames:
+            existing_users = list(parsed["usernames"])
+        else:
+            existing_users = []
+
+        combined_users = list(existing_users)
+        if use_username and username and username not in combined_users:
+            combined_users.append(username)
+
+        # -------- Suffixe zusammenstellen --------
+        combined_suffixes = list(existing_suffixes)
+        for s in suffixes_list:
+            if s not in combined_suffixes:
+                combined_suffixes.append(s)
+
+        # =====================================================================
+        # FIX: Kette INTERN immer mit "_" – unabhängig vom Separator.
+        # Dadurch bleibt die Kette ein zusammenhängender Block, der per
+        # Doppelklick markiert und gelöscht werden kann.
+        # =====================================================================
+        norm_suffixes = [
+            cls._normalize_for_separator(s, "_") for s in combined_suffixes
+        ]
+        norm_users = [
+            cls._normalize_for_separator(u, "_") for u in combined_users
+        ]
+        norm_suffixes = [s for s in norm_suffixes if s]
+        norm_users = [u for u in norm_users if u]
 
         # -------- Debug --------
         print(
             f"[FilenameGenerator] position={username_position}, "
             f"accumulate={accumulate_usernames}, separator='{separator}'"
         )
-        print(f"[FilenameGenerator] base_name (clean)='{base_name}'")
-        print(f"[FilenameGenerator] extracted_names={extracted_names}")
-        print(f"[FilenameGenerator] all_names={all_names}")
+        print(f"[FilenameGenerator] base='{base_clean}'")
+        print(f"[FilenameGenerator] has_protected={has_protected}")
+        print(f"[FilenameGenerator] existing_suffixes={existing_suffixes}")
+        print(f"[FilenameGenerator] combined_suffixes={combined_suffixes}")
+        print(f"[FilenameGenerator] norm_suffixes={norm_suffixes}")
+        print(f"[FilenameGenerator] combined_users={combined_users}")
+        print(f"[FilenameGenerator] norm_users={norm_users}")
 
-        # ===== Parts zusammenbauen =====
-        parts = []
+        # -------- Kette bauen (immer "_" intern) --------
+        chain_parts = []
+        if has_protected:
+            chain_parts.append(protected_clean)
+        chain_parts.extend(norm_suffixes)
+        chain_parts.extend(norm_users)
+        chain = "_".join(chain_parts)
+
+        # -------- Parts zusammenbauen --------
+        # out_parts werden später mit dem KONFIGURIERTEN Separator verbunden.
+        # Das trennt Base / Kette / Timestamp sauber.
+        out_parts = []
 
         if timestamp_position == "before" and timestamp_str:
-            parts.append(timestamp_str)
+            out_parts.append(timestamp_str)
 
-        parts.append(base_name)
+        out_parts.append(base_clean)
 
-        # Basisname-Modus: Namen VOR den Suffixen
-        if use_username and all_names and username_position == "before_timestamp":
-            if separator == "_":
-                parts.extend(all_names)
-            else:
-                # Marker "_" pro Name → klar unterscheidbar vom Basisnamen
-                parts.extend(["_" + n for n in all_names])
+        # Basisname-Modus: User direkt nach Base (bleibt als eigene Parts)
+        if (
+            use_username
+            and norm_users
+            and username_position == "before_timestamp"
+        ):
+            out_parts.extend(norm_users)
 
         if timestamp_position == "after" and timestamp_str:
-            parts.append(timestamp_str)
+            out_parts.append(timestamp_str)
 
-        # Suffixe – im Suffix-Modus hängen die Namen am LETZTEN Suffix
-        if suffixes_list:
-            for i, suf in enumerate(suffixes_list):
-                suf_clean = suf.lstrip("_")
-                is_last = i == len(suffixes_list) - 1
-                if (
-                    use_username
-                    and all_names
-                    and username_position == "suffix"
-                    and is_last
-                ):
-                    suf_clean = suf_clean + "_" + "_".join(all_names)
-                parts.append(suf_clean)
+        if chain:
+            out_parts.append(chain)
 
         if timestamp_position == "end" and timestamp_str:
-            parts.append(timestamp_str)
+            out_parts.append(timestamp_str)
 
         # -------- Zusammenfügen --------
+        # Hier wird der KONFIGURIERTE Separator verwendet – nur ZWISCHEN
+        # den Blöcken. Innerhalb der Kette bleibt "_" erhalten.
         if separator == "_":
-            filename = "_".join(parts)
+            filename = "_".join(out_parts)
             filename = re.sub(r"_+", "_", filename)
         elif separator == " ":
-            filename = " ".join(parts)
+            filename = " ".join(out_parts)
             filename = re.sub(r" +", " ", filename)
         else:
-            filename = "".join(parts)
-
-        # -------- Geschützt-Suffix --------
-        if is_protected:
-            protected_suffix = settings.value("protected_suffix", "_geschützt")
-            if use_username and username:
-                prot_with_user = f"{protected_suffix.lstrip('_')}_{username}"
-                if separator == "_":
-                    filename = f"{filename}_{prot_with_user}"
-                elif separator == " ":
-                    filename = f"{filename} {prot_with_user}"
-                else:
-                    filename = f"{filename}{prot_with_user}"
-            else:
-                if separator == "_":
-                    filename = f"{filename}_{protected_suffix.lstrip('_')}"
-                elif separator == " ":
-                    filename = f"{filename} {protected_suffix.lstrip('_')}"
-                else:
-                    filename = f"{filename}{protected_suffix.lstrip('_')}"
+            filename = "".join(out_parts)
 
         # -------- known_usernames aktualisieren --------
         if use_username and username:
@@ -3308,13 +3719,9 @@ class FilenameGenerator:
             )
             if not isinstance(current, list):
                 current = []
-            # Auch die über Suffix-Marker extrahierten Namen eintragen
-            # → beim nächsten Speichern sind sie lokal bekannt
-            for n in extracted_names:
+            for n in parsed["usernames"] + [username]:
                 if n and n not in current:
                     current.append(n)
-            if username not in current:
-                current.append(username)
             if len(current) > 100:
                 current = current[-100:]
             settings.setValue("filename/known_usernames", current)
@@ -3322,81 +3729,372 @@ class FilenameGenerator:
 
         filename += ".pdf"
         directory = os.path.dirname(pdf_path) if pdf_path else os.getcwd()
+
+        # -------- Neue Suffixe persistent speichern --------
+        try:
+            persisted = settings.value(
+                "filename/known_action_suffixes", [], type=list
+            )
+            if not isinstance(persisted, list):
+                persisted = []
+            changed = False
+            for s in suffixes_list + existing_suffixes:
+                if s and s not in persisted:
+                    persisted.append(s)
+                    changed = True
+            if changed:
+                if len(persisted) > 300:
+                    persisted = persisted[-300:]
+                settings.setValue("filename/known_action_suffixes", persisted)
+                settings.sync()
+        except Exception as e:
+            print(f"[FilenameGenerator] Warnung Persist: {e}")
+
         return os.path.join(directory, filename)
 
     @classmethod
+    def _get_all_suffix_translations(cls):
+        """
+        Liefert ALLE möglichen App-Suffixe – sprachunabhängig.
+
+        Quellen:
+        1. Harte Fallbacks (bekannte Varianten aus DE/EN/VI/AR).
+        2. Aktuell persistierte Suffixe aus QSettings
+        (filename/known_action_suffixes).
+        3. Dynamisch aus der Language-Klasse (falls verfügbar).
+
+        WICHTIG: "Kopie"/"Copy"/"backup" werden NICHT aufgenommen, weil sie
+        keine App-Suffixe sind, sondern Nutzer-/Workflow-Bestandteile.
+        """
+        result = set()
+
+        # --- 1. Harte Fallbacks ---
+        result.update({
+            # --- Deutsch ---
+            "mit_Unterschrift", "mit Unterschrift",
+            "mit_Text", "mit Text",
+            "mit_Bildern", "mit Bildern",
+            "mit_Bild", "mit Bild",
+            "mit_Formen", "mit Formen",
+            "mit_Form", "mit Form",
+            "mit_Seitenzahl", "mit Seitenzahl",
+            "mit_Seitenzahlen", "mit Seitenzahlen",
+            "mit_Seitenangabe", "mit Seitenangabe",
+            "mit_Datum", "mit Datum",
+            "mit_Wasserzeichen", "mit Wasserzeichen",
+            "mit_Auslöschung", "mit Auslöschung",
+            "mit_Einfuegung", "mit Einfuegung",
+            "mit_Einfügung", "mit Einfügung",
+            "mit_Einfuegungen", "mit Einfuegungen",
+            "mit_Einfügungen", "mit Einfügungen",
+            "mit_eigener_Seitenangabe", "mit eigener Seitenangabe",
+            "Seiten_verschoben", "Seiten verschoben",
+            "Seiten_gelöscht", "Seiten gelöscht",
+            "Seite_verschoben", "Seite verschoben",
+            "Seite_gelöscht", "Seite gelöscht",
+            "Seite_gedreht", "Seite gedreht",
+            "alle_Seiten_gedreht", "alle Seiten gedreht",
+
+            # --- Englisch ---
+            "with_Signature", "with Signature",
+            "with_Text", "with Text",
+            "with_Images", "with Images",
+            "with_Image", "with Image",
+            "with_Forms", "with Forms",
+            "with_Form", "with Form",
+            "with_Page_Number", "with Page Number",
+            "with_Page_Numbers", "with Page Numbers",
+            "with_Page_Declaration", "with Page Declaration",
+            "with_Date", "with Date",
+            "with_Watermark", "with Watermark",
+            "with_Redacted_Text", "with Redacted Text",
+            "with_Insertion", "with Insertion",
+            "with_Insertions", "with Insertions",
+            "with_My_Page_Declaration", "with My Page Declaration",
+            "pages_moved", "pages moved",
+            "pages_deleted", "pages deleted",
+            "page_moved", "page moved",
+            "page_deleted", "page deleted",
+            "page_rotated", "page rotated",
+            "all_pages_rotated", "all pages rotated",
+
+            # --- Vietnamesisch ---
+            "co_ChuKy", "co ChuKy",
+            "co_VanBan", "co VanBan",
+            "co_HinhDang", "co HinhDang",
+            "co_HinhAnh", "co HinhAnh",
+            "co_BieuMau", "co BieuMau",
+            "co_SoTrang", "co SoTrang",
+            "co_SoTrangs", "co SoTrangs",
+            "co_NgayThang", "co NgayThang",
+            "co_HinhMoc", "co HinhMoc",
+            "co_Xoa", "co Xoa",
+            "co_Chen", "co Chen",
+            "co_Chens", "co Chens",
+            "co_DongDau", "co DongDau",
+
+            # --- Arabisch ---
+            "مع_توقيع", "مع توقيع",
+            "مع_نص", "مع نص",
+            "مع_صور", "مع صور",
+            "مع_صورة", "مع صورة",
+            "مع_أشكال", "مع أشكال",
+            "مع_شكل", "مع شكل",
+            "مع_تاريخ", "مع تاريخ",
+            "مع_علامة_مائية", "مع علامة مائية",
+            "مع_تحرير", "مع تحرير",
+            "مع_إدراج", "مع إدراج",
+            "مع_إدراجات", "مع إدراجات",
+        })
+
+        # --- 2. Persistierte Suffixe aus QSettings ---
+        try:
+            settings = QSettings("BinhDiez", "PDFDarkView")
+            persisted = settings.value(
+                "filename/known_action_suffixes", [], type=list
+            )
+            if isinstance(persisted, list):
+                for s in persisted:
+                    if s and isinstance(s, str):
+                        result.add(s)
+        except Exception as e:
+            print(f"[FilenameGenerator] Warnung QSettings-Suffixe: {e}")
+
+        # --- 3. Dynamisch aus Language-Klasse (falls verfügbar) ---
+        suffix_keys = [
+            "filename_with_signature",
+            "filename_with_text",
+            "filename_with_images", "filename_with_image",
+            "filename_with_forms", "filename_with_form",
+            "filename_with_page_number", "filename_with_page_numbers",
+            "filename_with_watermark",
+            "filename_with_redacted_text",
+            "filename_with_insertion", "filename_with_insertions",
+            "filename_with_date",
+            "filename_with_my_page_declaration",
+            "filename_page_moved", "filename_page_deleted",
+        ]
+        try:
+            all_trans = None
+            for attr in ("ALL_TRANSLATIONS", "all_translations",
+                        "TRANSLATIONS", "translations", "_translations"):
+                if hasattr(Language, attr):
+                    val = getattr(Language, attr)
+                    if isinstance(val, dict):
+                        all_trans = val
+                        break
+
+            if all_trans is None:
+                import sys
+                mod = sys.modules.get(Language.__module__)
+                if mod:
+                    for attr in ("TRANSLATIONS", "ALL_TRANSLATIONS",
+                                "LANGUAGES", "ALL_LANGUAGES"):
+                        if hasattr(mod, attr):
+                            val = getattr(mod, attr)
+                            if isinstance(val, dict):
+                                all_trans = val
+                                break
+
+            if isinstance(all_trans, dict):
+                for _lang_code, trans in all_trans.items():
+                    if not isinstance(trans, dict):
+                        continue
+                    for key in suffix_keys:
+                        val = trans.get(key)
+                        if val and isinstance(val, str):
+                            result.add(val)
+        except Exception as e:
+            print(f"[FilenameGenerator] Warnung Sprachsuffixe: {e}")
+
+        return {s for s in result if s and len(s.strip()) >= 2}
+
+
+    @classmethod
     def clean_base_name(cls, base_name):
-        """Entfernt alle bekannten Suffixe aus dem Basisnamen (sprachunabhängig)."""
-        known_suffixes = [
-            "pages_moved",
-            "Seiten_verschoben",
-            "page_moved",
-            "Seite_verschoben",
-            "pages_deleted",
-            "Seiten_gelöscht",
-            "page_deleted",
-            "Seite_gelöscht",
-            "with_text",
-            "mit_Text",
-            "with_signature",
-            "mit_Unterschrift",
-            "with_images",
-            "mit_Bildern",
-            "with_image",
-            "mit_Bild",
-            "with_forms",
-            "mit_Formen",
-            "with_form",
-            "mit_Form",
-            "mit_Seitenzahl",
-            "with_page_number",
-            "mit_Seitenzahlen",
-            "with_page_numbers",
-            "mit_Seitenangabe",
-            "with_page_declaration",
-            "mit_Datum",
-            "with_date",
-            "mit_eigener_Seitenangabe",
-            "with_my_page_declaration",
-            "mit_Wasserzeichen",
-            "with_watermark",
-            "mit_Auslöschung",
-            "with_redacted_text",
-            "with_insertion",
-            "mit_Einfuegung",
-            "mit_Einfügung",
-            "with_insertions",
-            "mit_Einfuegungen",
-            "mit_Einfügungen",
-            "Seite_gedreht",
-            "alle_Seiten_gedreht",
-            "page_rotaded",
-            "all_pages_rotaded",
+        """
+        Entfernt alle bekannten App-Suffixe sprachunabhängig aus dem Basisnamen.
+
+        WICHTIG:
+        - Space-interne Suffixe ("co VanBan") matchen auch die Underscore-Form
+        ("co_VanBan").
+        - "Kopie"/"Copy" sind NICHT in der Suffix-Liste und bleiben erhalten.
+        - Idempotent: mehrfacher Aufruf ändert nichts.
+        """
+        if not base_name:
+            return base_name
+
+        original = base_name
+        suffixes = cls._get_all_suffix_translations()
+        sorted_suffixes = sorted(suffixes, key=len, reverse=True)
+
+        for suf in sorted_suffixes:
+            if not suf:
+                continue
+            parts = re.split(r"[_\s]+", suf.lstrip("_"))
+            parts = [re.escape(p) for p in parts if p]
+            if not parts:
+                continue
+            inner = r"[_\s]+".join(parts)
+            pattern = r"(?:^|[_\s])" + inner + r"(?=[_\s]|$)"
+            prev = None
+            while prev != base_name:
+                prev = base_name
+                base_name = re.sub(pattern, "", base_name)
+
+        # Aufräumen: mehrfache Separatoren reduzieren, Rand separatoren weg
+        base_name = re.sub(r"_{2,}", "_", base_name)
+        base_name = re.sub(r" {2,}", " ", base_name)
+        base_name = re.sub(r"_ +", "_", base_name)
+        base_name = re.sub(r" +_", "_", base_name)
+        base_name = base_name.strip("_ .")
+
+        if not base_name:
+            return original
+        return base_name
+
+    @classmethod
+    def _all_known_action_suffixes(cls):
+        """
+        Alle bekannten Aktions-Suffixe zur Erkennung in bestehenden Dateinamen.
+
+        WICHTIG: "Kopie"/"Copy"/"backup"/"dup"/"duplicate" sind NICHT dabei!
+        Diese stammen aus dem manuellen "Speichern unter"-Workflow bzw. von
+        Kollisionskopien und gehören zum Nutzernamen – sie dürfen NICHT
+        automatisch aus dem Basisnamen entfernt werden.
+        """
+        return [
+            "mit_Unterschrift", "with_signature",
+            "mit_Text", "with_text",
+            "mit_Bildern", "with_images", "mit_Bild", "with_image",
+            "mit_Formen", "with_forms", "mit_Form", "with_form",
+            "mit_Seitenzahl", "with_page_number",
+            "mit_Seitenzahlen", "with_page_numbers",
+            "mit_Seitenangabe", "with_page_declaration",
+            "mit_Datum", "with_date",
+            "mit_Wasserzeichen", "with_watermark",
+            "mit_Auslöschung", "with_redacted_text",
+            "mit_Einfuegung", "mit_Einfügung", "with_insertion",
+            "mit_Einfuegungen", "mit_Einfügungen", "with_insertions",
             "ocr",
-            "backup",
-            "Copy",
-            "Kopie",
-            "gedreht",
-            "rotaded",
-            "zusammengefuegt",
-            "merged",
-            "Seite_",
-            "Seiten_",
-            "Seiten",
-            "page_",
-            "pages_",
-            "pages",
-            "PDFA-1",
-            "PDFA-2",
-            "PDFA-3",
+            "unencrypted", "unverschlüsselt",
+            "PDFA-1", "PDFA-2", "PDFA-3",
+            "Seiten_gelöscht", "pages_deleted",
+            "Seite_gelöscht", "page_deleted",
+            "Seiten_verschoben", "pages_moved",
+            "Seite_verschoben", "page_moved",
+            "Seite_gedreht", "alle_Seiten_gedreht",
+            "page_rotated", "all_pages_rotated",
         ]
 
-        for suf in known_suffixes:
-            base_name = re.sub(r"_{}".format(re.escape(suf)), "", base_name)
-            base_name = re.sub(r"{}".format(re.escape(suf)), "", base_name)
-            base_name = re.sub(r" {}".format(re.escape(suf)), "", base_name)
-        base_name = re.sub(r"[ _]+", "_", base_name).strip("_ ")
-        return base_name
+    @classmethod
+    def _parse_filename_into_parts(
+        cls, name, protected_markers, known_suffixes, known_usernames
+    ):
+        """
+        Zerlegt einen bestehenden Dateinamen in Bestandteile.
+
+        WICHTIG:
+        - Der Basisname wird NICHT mehr global normalisiert. Seine
+        Separatoren (Space oder _) bleiben erhalten.
+        - Suffixe werden sprachunabhängig erkannt: "co VanBan" matcht
+        auch "co_VanBan", "co  VanBan" usw.
+        - "Kopie"/"Copy" sind keine Action-Suffixe und bleiben im Base.
+        - Trailing-Number-Cleanup ("_1", " 2") wird bei "Kopie"/"Copy"
+        übersprungen, weil dort die Ziffer Bestandteil des Namens ist.
+        """
+        result = {"base": name, "protected": False, "suffixes": [], "usernames": []}
+        work = name
+
+        def _to_pattern(text):
+            """Wandelt einen bekannten Suffix-Text in ein tolerant-matchendes Regex.
+            'co VanBan' -> r'co[_\s]+VanBan'  (matcht '_' ODER ' ' als Trenner)."""
+            parts = re.split(r"[_\s]+", text.lstrip("_"))
+            parts = [re.escape(p) for p in parts if p]
+            return r"[_\s]+".join(parts)
+
+        # 1. Schutz-Marker entfernen
+        for pm in protected_markers:
+            if not pm:
+                continue
+            inner = _to_pattern(pm)
+            if not inner:
+                continue
+            m = re.search(r"(?:^|[_\s])(" + inner + r")(?=[_\s]|$)", work)
+            if m:
+                result["protected"] = True
+                work = work[:m.start()] + work[m.end():]
+                break
+
+        # 2. Bekannte Suffixe entfernen (leftmost zuerst)
+        while True:
+            leftmost_match = None
+            leftmost_suf = None
+            for suf in known_suffixes:
+                if not suf:
+                    continue
+                inner = _to_pattern(suf)
+                if not inner:
+                    continue
+                m = re.search(r"(?:^|[_\s])(" + inner + r")(?=[_\s]|$)", work)
+                if m and (
+                    leftmost_match is None or m.start() < leftmost_match.start()
+                ):
+                    leftmost_match = m
+                    leftmost_suf = suf.lstrip("_")
+
+            if not leftmost_match:
+                break
+
+            if leftmost_suf and leftmost_suf not in result["suffixes"]:
+                result["suffixes"].append(leftmost_suf)
+            work = work[:leftmost_match.start()] + work[leftmost_match.end():]
+
+        # 3. KEINE globale Separator-Normalisierung mehr!
+        #    Nur führende/abschließende Separatoren und Mehrfach-Wiederholungen
+        #    werden aufgeräumt – die Art des Separators bleibt erhalten.
+        work = work.strip("_ ")
+        work = re.sub(r"_{2,}", "_", work)
+        work = re.sub(r" {2,}", " ", work)
+        work = re.sub(r"_ +", "_", work)
+        work = re.sub(r" +_", "_", work)
+
+        # 4. Trailing-Duplikat-Zähler ("_1", " 2", "_13") – mit Kopie-Ausnahme
+        has_copy_marker = bool(
+            re.search(r"(?:^|[\s_])Kopie(?:[\s_]|$)", work, re.IGNORECASE)
+            or re.search(r"(?:^|[\s_])Copy(?:[\s_]|$)", work, re.IGNORECASE)
+        )
+        if not has_copy_marker:
+            work = re.sub(r"[_\s]+\d{1,4}$", "", work)
+
+        # 5. Usernames am Ende extrahieren
+        if known_usernames:
+            work, trailing = cls._extract_trailing_usernames(work, known_usernames)
+            result["usernames"] = list(trailing)
+
+        result["base"] = work.strip("_ ") or "dokument"
+        return result
+
+    @classmethod
+    def _normalize_for_separator(cls, text, separator):
+        """
+        Ersetzt alle Whitespace- und Underscore-Zeichen im Text durch den
+        konfigurierten Separator. Wird auf Suffixe und Usernames angewendet,
+        NICHT auf den Basisnamen (dort wären Ziffern/Leerzeichen legitim).
+
+        Beispiele:
+            _normalize_for_separator("co ChuKy", "_")  -> "co_ChuKy"
+            _normalize_for_separator("mit_Unterschrift", " ") -> "mit Unterschrift"
+            _normalize_for_separator("Meier", "_") -> "Meier"
+        """
+        if not text:
+            return text
+        if separator == "_":
+            return re.sub(r"[\s_]+", "_", text).strip("_")
+        elif separator == " ":
+            return re.sub(r"[\s_]+", " ", text).strip()
+        else:
+            return re.sub(r"[\s_]+", "", text)
 
 
 ### ===================================
@@ -9745,10 +10443,14 @@ class PDFLoaderThread(QThread):
         try:
             # PDF-Dokument öffnen (muss bereits entschlüsselt sein!)
             doc = fitz.open(self.pdf_path)
-
-            # Prüfe ob Dokument verschlüsselt ist (sollte nicht mehr der Fall sein)
-            if doc.is_encrypted:
-                raise ValueError("Dokument ist immer noch verschlüsselt!")
+            if doc.is_encrypted or doc.needs_pass:
+                if self.password:
+                    if not doc.authenticate(self.password):
+                        doc.close()
+                        raise Exception(self.lang.tr("password_wrong"))
+                else:
+                    doc.close()
+                    raise Exception(self.lang.tr("pdf_encrypted"))
 
             total_pages = len(doc)
             page_pixmaps = []
@@ -10742,17 +11444,46 @@ class OCRSettingsDialog(QDialog):
 
 
 class OCRThread(QThread):
-    progress_updated = pyqtSignal(int)
+    """
+    Fuehrt OCR auf einer PDF aus.
+
+    Plattformen:
+      - Windows: WindowsOCRThread (pytesseract + reportlab)
+      - macOS/Linux: ocrmypdf (Subprocess)
+
+    Robustheit:
+      - Ghostscript-Fehler auf einzelnen Seiten werden erkannt.
+      - Die problematische Seite wird als Bild eingebettet und
+        ocrmypdf erneut gestartet (Retry-Loop).
+      - Temp-Kopien werden in jedem Fall aufgeraeumt.
+
+    Fortschritt:
+      - Signal progress_updated(int, str) mit Phasentext.
+      - Phasenbasierte Baselines:
+          0-5   Vorbereitung
+          5-60  Rasterize + OCR
+          60-65 Graft
+          65-95 Optimierung
+          95-99 Postprocessing
+          100   Fertig
+    """
+
+    progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, input_path, output_path, dark_mode=True):
+    MAX_RETRIES = 10
+
+    def __init__(self, input_path, output_path, dark_mode=True, password=None, lang=None):
         super().__init__()
-        print(f"🆕 OCRThread erstellt für: {os.path.basename(input_path)}")
+        print("OCRThread erstellt fuer: " + os.path.basename(input_path))
 
         ShutdownRegistry.register(self)
         self.input_path = input_path
         self.output_path = output_path
         self.dark_mode = dark_mode
+        self.password = password
+        self.lang = lang
+
         self.canceled = False
         self.process = None
         self._is_canceled = False
@@ -10760,62 +11491,447 @@ class OCRThread(QThread):
         self._tessconfig_path = None
         self.real_ocr_done = False
 
+        # Zustand fuer Cleanup
+        self._is_temp = False
+        self._temp_source = None
+        self._sanitized_temp = None
+        self._working_copy = None
+
+        # Fortschritt: hoechster erreichter Wert, damit Retries nicht
+        # rueckwaerts springen
+        self._max_progress_seen = 0
+
+        # Retry-Tracking: Seiten, die bereits erfolglos als Bild
+        # eingebettet wurden, damit wir nicht endlos dieselbe Seite
+        # umwandeln.
+        self._tried_pages = set()
+
+        # Fortschritts-Debouncing
+        self._last_emit_time = 0.0
+
+    # -------------------------------------------------------------
+    # Hilfsmethoden fuer Fortschritt
+    # -------------------------------------------------------------
+
+    def _emit_progress(self, value, message="", min_interval=0.3):
+        """
+        Klemmt den Wert auf >= bisheriger Maximalwert und emittiert.
+        Drosselt die Emissionen auf hoechstens ein Update pro
+        min_interval Sekunden, damit der Statustext im Dialog sichtbar
+        bleibt statt von der naechsten Log-Zeile ueberschrieben zu
+        werden.
+        """
+        if value > self._max_progress_seen:
+            self._max_progress_seen = value
+
+        now = time.time()
+        if now - self._last_emit_time < min_interval:
+            return
+
+        self._last_emit_time = now
+        self.progress_updated.emit(self._max_progress_seen, message)
+
+    # -------------------------------------------------------------
+    # Hauptablauf
+    # -------------------------------------------------------------
+
     def run(self):
-        print(f"🟢 OCR gestartet")
+        print("OCR gestartet")
         t0 = time.time()
+
         try:
             if self._is_canceled:
                 return
 
+            self._emit_progress(0, self.tr_text("ocr_status_preparing"))
+
+            # PDF oeffnen und bei Bedarf authentifizieren
             doc = fitz.open(self.input_path)
+            if doc.is_encrypted or doc.needs_pass:
+                if not self.password:
+                    doc.close()
+                    raise Exception(self._t("pdf_encrypted", "PDF verschluesselt, kein Passwort"))
+                if not doc.authenticate(self.password):
+                    doc.close()
+                    raise Exception(self._t("password_wrong", "Falsches Passwort"))
             total_pages = len(doc)
             doc.close()
-            print(f"📄 Dokument hat {total_pages} Seiten")
+            print("Dokument hat " + str(total_pages) + " Seiten")
 
-            # Einziger Versuch: echte OCR
-            if self._run_ocr(total_pages) and os.path.exists(self.output_path):
+            self._emit_progress(2, self.tr_text("ocr_status_preparing"))
+
+            # OCR durchfuehren
+            success = self._run_ocr(total_pages)
+
+            if success and os.path.exists(self.output_path):
+                self._emit_progress(100, self.tr_text("ocr_status_done"))
                 self._emit_success()
-                print(f"[TIMING] OCR Laufzeit: {time.time() - t0:.3f}s")
+                print("[TIMING] OCR Laufzeit: " + str(round(time.time() - t0, 3)) + "s")
 
         except Exception as e:
-            print(f"💥 Fehler: {e}")
+            print("Fehler: " + str(e))
             self.finished.emit(False, str(e))
 
-    def _run_ocr(self, total_pages):
-        if platform.system() == "Windows":
-            # Windows: Verwende die neue OCR-Klasse
-            self.windows_ocr = WindowsOCRThread(
-                self.input_path, self.output_path, self.dark_mode
-            )
-            self.windows_ocr.progress_updated.connect(self.progress_updated)
-            self.windows_ocr.finished.connect(self.finished)
-            self.windows_ocr.start()
-            return True
-        else:
-            if not self._check_ocr_tools():
+        finally:
+            self._cleanup_temp_files()
+
+    def _cleanup_temp_files(self):
+        """Raeumt alle Zwischendateien auf."""
+        # Sanitize-Kopie
+        if self._sanitized_temp and os.path.exists(self._sanitized_temp):
+            try:
+                os.remove(self._sanitized_temp)
+                print("Sanitize-Kopie entfernt: " + os.path.basename(self._sanitized_temp))
+            except Exception as ce:
+                print("WARN Sanitize-Cleanup: " + str(ce))
+            self._sanitized_temp = None
+
+        # Working-Copy
+        if self._working_copy and os.path.exists(self._working_copy):
+            try:
+                os.remove(self._working_copy)
+                print("Working-Copy entfernt: " + os.path.basename(self._working_copy))
+            except Exception as ce:
+                print("WARN Working-Copy-Cleanup: " + str(ce))
+            self._working_copy = None
+
+        # Entschluesselte Temp-Kopie
+        if self._is_temp and self._temp_source and os.path.exists(self._temp_source):
+            try:
+                os.remove(self._temp_source)
+                tmp_dir = os.path.dirname(self._temp_source)
+                if os.path.isdir(tmp_dir) and not os.listdir(tmp_dir):
+                    os.rmdir(tmp_dir)
+                print("Temp-OCR-Kopie entfernt: " + tmp_dir)
+            except Exception as ce:
+                print("WARN Temp-Cleanup: " + str(ce))
+            self._temp_source = None
+
+    def _t(self, key, fallback):
+        """Kurze Uebersetzungshilfe."""
+        if self.lang and hasattr(self.lang, "tr"):
+            try:
+                return self.lang.tr(key)
+            except Exception:
+                return fallback
+        return fallback
+
+    def tr_text(self, key):
+        """Laedt einen Statustext aus der Uebersetzung mit Fallback."""
+        fallback_map = {
+            "ocr_status_preparing": "PDF wird vorbereitet...",
+            "ocr_status_rasterizing": "Rasterisierung l\u00e4uft...",
+            "ocr_status_recognizing": "Texterkennung in Arbeit...",
+            "ocr_status_grafting": "Text wird eingebettet...",
+            "ocr_status_optimizing": "Optimierung l\u00e4uft...",
+            "ocr_status_postprocessing": "Nachbearbeitung l\u00e4uft...",
+            "ocr_status_done": "OCR abgeschlossen",
+            "ocr_status_retry": "Neuer Versuch...",
+            "ocr_status_page_fallback": "Seite {0} wird als Bild eingebettet...",
+        }
+        if self.lang and hasattr(self.lang, "tr"):
+            try:
+                text = self.lang.tr(key)
+                if text and text != key:
+                    return text
+            except Exception:
+                pass
+        return fallback_map.get(key, key)
+
+    # -------------------------------------------------------------
+    # Komplexitaets-Bewertung (adaptive Beschleunigung)
+    # -------------------------------------------------------------
+
+    def _assess_document_complexity(self, source_path, total_pages):
+        """
+        Bewertet, ob das Dokument extrem grosse Seiten hat.
+        Rueckgabe: (is_extreme, avg_area, a4_area)
+        """
+        try:
+            doc = fitz.open(source_path)
+            if doc.is_encrypted or doc.needs_pass:
+                if self.password:
+                    doc.authenticate(self.password)
+
+            sample_n = min(5, total_pages)
+            area_sum = 0.0
+            for i in range(sample_n):
+                r = doc[i].rect
+                area_sum += r.width * r.height
+            doc.close()
+
+            avg_area = area_sum / sample_n if sample_n else 595 * 842
+            a4_area = 595 * 842
+            is_extreme = avg_area > 4 * a4_area
+            return is_extreme, avg_area, a4_area
+        except Exception as e:
+            print("WARN Komplexitaets-Check: " + str(e))
+            return False, 595 * 842, 595 * 842
+
+    # -------------------------------------------------------------
+    # OCR-Vorbereitung (Temp-Kopie + Sanitize)
+    # -------------------------------------------------------------
+
+    def _sanitize_pdf_for_ocr(self, source_path):
+        """
+        Schreibt die PDF mit PyMuPDF neu, um problematische Streams
+        zu bereinigen. Gibt den Pfad zur bereinigten Kopie zurueck
+        oder source_path, wenn das Sanitizen fehlgeschlagen ist.
+        """
+        try:
+            probe = fitz.open(source_path)
+            if probe.is_encrypted or probe.needs_pass:
+                if self.password:
+                    probe.authenticate(self.password)
+                else:
+                    probe.close()
+                    return source_path
+
+            sanitized_path = source_path + ".sanitized.pdf"
+            probe.save(sanitized_path, garbage=4, deflate=True, clean=True)
+            probe.close()
+
+            test_new = fitz.open(sanitized_path)
+            n_new = len(test_new)
+            test_new.close()
+            test_old = fitz.open(source_path)
+            n_old = len(test_old)
+            test_old.close()
+
+            if n_new != n_old or n_new == 0:
+                print("WARN Sanitize abweichende Seitenzahl (" + str(n_old) + " -> " + str(n_new) + "), verwerfe Sanitize")
+                try:
+                    os.remove(sanitized_path)
+                except Exception:
+                    pass
+                return source_path
+
+            print("PDF vor OCR sanitiert: " + os.path.basename(sanitized_path) + " (" + str(n_new) + " Seiten)")
+            self._sanitized_temp = sanitized_path
+            return sanitized_path
+        except Exception as e:
+            print("WARN Sanitize vor OCR fehlgeschlagen: " + str(e))
+            return source_path
+
+    # -------------------------------------------------------------
+    # Seiten-Fallback bei Ghostscript-Fehler
+    # -------------------------------------------------------------
+
+    def _extract_failing_page_from_stderr(self, stderr_text):
+        """
+        Sucht die problematische Seitennummer in stderr.
+        Strategie: Von der Fehlerstelle aus RUECKWAERTS nach
+        -dFirstPage=N suchen. Nur die Zeilen DIREKT vor dem
+        Fehler gehoeren zum abgestuerzten Aufruf.
+        """
+        if not stderr_text:
+            return None
+
+        lines = stderr_text.splitlines()
+
+        # Von hinten nach Fehlermarkern suchen
+        fehler_marker = (
+            "Ghostscript rasterizing failed",
+            "SubprocessOutputError",
+            "CalledProcessError",
+            "returned non-zero exit status",
+        )
+        for i in range(len(lines) - 1, -1, -1):
+            line = lines[i]
+            if any(marker in line for marker in fehler_marker):
+                # In dieser Zeile und den 40 vorherigen nach
+                # -dFirstPage=N suchen (von hinten nach vorn)
+                start = max(0, i - 40)
+                for j in range(i, start - 1, -1):
+                    m = re.search(r"-dFirstPage=(\d+)", lines[j])
+                    if m:
+                        try:
+                            return int(m.group(1))
+                        except Exception:
+                            pass
+
+        # Fallback 1: letzte Erwaehnung im gesamten Text
+        matches = re.findall(r"-dFirstPage=(\d+)", stderr_text)
+        if matches:
+            try:
+                return int(matches[-1])
+            except Exception:
+                pass
+
+        return None
+
+    def _replace_page_with_image(self, pdf_path, page_num_1based, dpi=300):
+        """
+        Ersetzt die Seite page_num_1based in pdf_path durch ein Bild,
+        damit Ghostscript sie beim naechsten Lauf nicht mehr rasterisieren muss.
+        """
+        try:
+            doc = fitz.open(pdf_path)
+            if doc.is_encrypted or doc.needs_pass:
+                if self.password:
+                    doc.authenticate(self.password)
+
+            if page_num_1based < 1 or page_num_1based > len(doc):
+                doc.close()
                 return False
 
-            env = self._prepare_environment()
-            settings = QSettings("BinhDiez", "PDFDarkView")
+            src_idx = page_num_1based - 1
+            src_page = doc[src_idx]
+            zoom = dpi / 72.0
+            mat = fitz.Matrix(zoom, zoom)
+            pix = src_page.get_pixmap(matrix=mat)
+            img_bytes = pix.tobytes("png")
 
-            ocr_lang = settings.value("ocr_language", "deu+eng+vie")
-            force_ocr = settings.value("ocr_force_ocr", True, type=bool)
-            deskew = settings.value("ocr_deskew", True, type=bool)
-            clean = settings.value("ocr_clean", True, type=bool)
-            oversample = settings.value("ocr_oversample", 300, type=int)
-            pagesegmode = settings.value("ocr_pagesegmode", 6, type=int)
-            oem = settings.value("ocr_oem", 3, type=int)
-            optimize = settings.value("ocr_optimize", 1, type=int)
-            jobs = settings.value("ocr_jobs", 4, type=int)
+            # Neue PDF mit derselben Seitenreihenfolge, wobei die
+            # problematische Seite durch das Bild ersetzt wird.
+            new_doc = fitz.open()
+            for i in range(len(doc)):
+                if i == src_idx:
+                    # Neue Seite mit gleicher Groesse, Bild einfuegen
+                    rect = doc[i].rect
+                    new_page = new_doc.new_page(width=rect.width, height=rect.height)
+                    new_page.insert_image(rect, stream=img_bytes)
+                else:
+                    new_doc.insert_pdf(doc, from_page=i, to_page=i)
 
-            verbose_setting = settings.value("ocr_verbose", 1, type=int)  # 0..3
-            if verbose_setting <= 2:
-                verbose_arg = verbose_setting
-            else:
-                verbose_arg = 2
+            doc.close()
 
+            # Alte Datei ersetzen
+            tmp_out = pdf_path + ".replaced.pdf"
+            new_doc.save(tmp_out, garbage=4, deflate=True)
+            new_doc.close()
+            os.replace(tmp_out, pdf_path)
+            print("Seite " + str(page_num_1based) + " als Bild eingebettet (" + str(dpi) + " DPI)")
+            return True
+        except Exception as e:
+            print("WARN Seiten-Fallback fehlgeschlagen: " + str(e))
+            return False
+
+    # -------------------------------------------------------------
+    # OCR-Ausfuehrung
+    # -------------------------------------------------------------
+
+    def _run_ocr(self, total_pages):
+        """Fuehrt die eigentliche OCR durch. Gibt True bei Erfolg."""
+        try:
+            source_path, self._is_temp = prepare_decrypted_temp(
+                self.input_path, self.password, self.lang
+            )
+        except Exception as e:
+            print("Vorbereitung fehlgeschlagen: " + str(e))
+            self.finished.emit(False, str(e))
+            return False
+
+        if platform.system() == "Windows":
+            return self._run_windows_ocr(source_path)
+
+        # macOS / Linux: ocrmypdf
+        if not self._check_ocr_tools():
+            self.finished.emit(False, "OCR-Tools nicht verfuegbar")
+            return False
+
+        return self._run_ocrmypdf_with_fallback(source_path, total_pages)
+
+    def _run_windows_ocr(self, source_path):
+        """Synchroner Aufruf der Windows-OCR im aktuellen Thread."""
+        self._emit_progress(5, self.tr_text("ocr_status_rasterizing"))
+
+        self.windows_ocr = WindowsOCRThread(source_path, self.output_path, self.dark_mode)
+        self.windows_ocr.progress_updated.connect(self._on_windows_progress)
+
+        try:
+            self.windows_ocr.run_sync()
+        except Exception as we:
+            print("Windows-OCR-Fehler: " + str(we))
+            self.finished.emit(False, str(we))
+            return False
+
+        if self._is_canceled:
+            return False
+
+        self.real_ocr_done = bool(self.windows_ocr.real_ocr_done)
+        return self.real_ocr_done
+
+    def _on_windows_progress(self, value):
+        """Mapped den Windows-Fortschritt auf das Phasenmodell."""
+        # Windows-Fortschritt 0-100 auf 5-60 mappen
+        mapped = 5 + int(value * 0.55)
+        self._emit_progress(mapped, self.tr_text("ocr_status_recognizing"))
+
+    def _run_ocrmypdf_with_fallback(self, source_path, total_pages):
+        """
+        ocrmypdf mit Retry-Loop. Bei Ghostscript-Fehlern wird die
+        betroffene Seite als Bild eingebettet und erneut versucht.
+        """
+        # Sanitize
+        source_path = self._sanitize_pdf_for_ocr(source_path)
+
+        # Komplexitaet pruefen (adaptive Beschleunigung)
+        is_extreme, avg_area, a4_area = self._assess_document_complexity(
+            source_path, total_pages
+        )
+
+        # Settings laden
+        settings = QSettings("BinhDiez", "PDFDarkView")
+        ocr_lang = settings.value("ocr_language", "deu+eng+vie")
+        force_ocr = settings.value("ocr_force_ocr", True, type=bool)
+        deskew = settings.value("ocr_deskew", True, type=bool)
+        clean = settings.value("ocr_clean", True, type=bool)
+        oversample = settings.value("ocr_oversample", 300, type=int)
+        pagesegmode = settings.value("ocr_pagesegmode", 6, type=int)
+        oem = settings.value("ocr_oem", 3, type=int)
+        optimize = settings.value("ocr_optimize", 1, type=int)
+        jobs = settings.value("ocr_jobs", 4, type=int)
+        verbose_setting = settings.value("ocr_verbose", 1, type=int)
+        verbose_arg = verbose_setting if verbose_setting <= 2 else 2
+
+        # Adaptive Anpassung bei extremen Dokumenten
+        if is_extreme:
+            old_dpi = oversample
+            oversample = min(oversample, 300)
+            if optimize > 0:
+                optimize = 0
+            if clean:
+                clean = False
+            print(
+                "[OCR] Extrem grosse Seiten (Durchschnitt "
+                + str(int(avg_area))
+                + "pt2, A4="
+                + str(a4_area)
+                + "). Anpassung: DPI "
+                + str(old_dpi)
+                + " -> "
+                + str(oversample)
+                + ", optimize=0, clean=False"
+            )
+            self._emit_progress(
+                3,
+                "Extrem grosse Seiten erkannt - Einstellungen angepasst",
+            )
+
+        # Working-Copy anlegen
+        self._working_copy = source_path + ".working.pdf"
+        try:
+            shutil.copy2(source_path, self._working_copy)
+        except Exception as e:
+            print("WARN Working-Copy fehlgeschlagen: " + str(e))
+            self._working_copy = None
+            return False
+
+        # Environment vorbereiten (Tesseract, Poppler)
+        env = self._prepare_environment()
+        if verbose_setting == 3:
+            env["TESSERACT_DEBUG"] = "1"
+
+        retry = 0
+        last_error = ""
+
+        while retry <= self.MAX_RETRIES:
+            if self._is_canceled:
+                return False
+
+            # ocr_args bauen
             ocr_args = [Config.OCRMYPDF_PATH]
-
             if force_ocr:
                 ocr_args.append("--force-ocr")
             ocr_args.extend(["--language", ocr_lang])
@@ -10823,65 +11939,268 @@ class OCRThread(QThread):
                 ocr_args.append("--deskew")
             if clean:
                 ocr_args.append("--clean")
-            ocr_args.extend(
-                [
-                    "--output-type",
-                    "pdf",
-                    "--optimize",
-                    str(optimize),
-                    "--jobs",
-                    str(jobs),
-                    "--verbose",
-                    str(verbose_arg),  # nur einmal!
-                    "--oversample",
-                    str(oversample),
-                    "--tesseract-pagesegmode",
-                    str(pagesegmode),
-                    "--tesseract-oem",
-                    str(oem),
-                ]
-            )
+            ocr_args.extend([
+                "--output-type", "pdf",
+                "--optimize", str(optimize),
+                "--jobs", str(jobs),
+                "--verbose", str(verbose_arg),
+                "--oversample", str(oversample),
+                "--tesseract-pagesegmode", str(pagesegmode),
+                "--tesseract-oem", str(oem),
+            ])
+            ocr_args.extend([self._working_copy, self.output_path])
 
-            if verbose_setting == 3:
-                env["TESSERACT_DEBUG"] = "1"
+            # Gesamtseitenzahl fuer Fortschrittsberechnung verfuegbar machen
+            self._total_pages_for_progress = total_pages
 
-            ocr_args.extend([self.input_path, self.output_path])
+            if retry == 0:
+                print("Starte OCR mit " + str(total_pages) + " Seiten")
+            else:
+                print("OCR Retry " + str(retry) + "/" + str(self.MAX_RETRIES))
+            print("Befehl: " + " ".join(ocr_args))
 
-            print(f"🚀 Starte OCR mit {total_pages} Seiten")
-            print(f"🔧 Befehl: {' '.join(ocr_args)}")
+            if retry == 0:
+                self._emit_progress(5, self.tr_text("ocr_status_rasterizing"))
+            else:
+                self._emit_progress(
+                    self._max_progress_seen,
+                    self.tr_text("ocr_status_retry") + " (" + str(retry) + ")",
+                )
 
-            def read_stream(stream, prefix):
+            # Subprocess starten
+            try:
+                self.process = subprocess.Popen(
+                    ocr_args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    universal_newlines=True,
+                    bufsize=1,
+                    env=env,
+                )
+            except Exception as pe:
+                print("Prozess-Start fehlgeschlagen: " + str(pe))
+                self.finished.emit(False, str(pe))
+                return False
+
+            # Streams lesen
+            stderr_buffer = []
+
+            def read_stream(stream, prefix, collect_stderr=False):
                 for line in iter(stream.readline, ""):
-                    if line:
-                        print(f"{prefix}{line.strip()}", flush=True)
+                    if not line:
+                        continue
+                    print(prefix + line.strip(), flush=True)
+                    if collect_stderr:
+                        stderr_buffer.append(line)
+                    self._process_progress_line(line)
 
-            self.process = subprocess.Popen(
-                ocr_args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                universal_newlines=True,
-                bufsize=1,
-                env=env,
-            )
-            threading.Thread(
-                target=read_stream, args=(self.process.stdout, "[OCR] "), daemon=True
-            ).start()
-            threading.Thread(
+            t_out = threading.Thread(
                 target=read_stream,
-                args=(self.process.stderr, "[OCR ERR] "),
+                args=(self.process.stdout, "[OCR] ", False),
                 daemon=True,
-            ).start()
+            )
+            t_err = threading.Thread(
+                target=read_stream,
+                args=(self.process.stderr, "[OCR ERR] ", True),
+                daemon=True,
+            )
+            t_out.start()
+            t_err.start()
 
-            return self._monitor_ocr(total_pages)
+            # Warten
+            ok = self._monitor_ocr(total_pages)
+
+            # WICHTIG: Auf Reader-Threads warten, damit stderr_buffer
+            # vollstaendig gefuellt ist, bevor wir auswerten.
+            try:
+                t_err.join(timeout=5.0)
+                t_out.join(timeout=5.0)
+            except Exception as je:
+                print("WARN Reader-Thread-Join: " + str(je))
+
+            # Kurze Karenzzeit, falls letzte Zeilen gerade erst ankommen
+            time.sleep(0.3)
+
+            if ok:
+                return True
+
+            # Fehler analysieren
+            stderr_text = "".join(stderr_buffer)
+
+            # print(
+            #     "DEBUG Retry-Analyse: stderr_buffer="
+            #     + str(len(stderr_text))
+            #     + " Zeichen"
+            # )
+
+            # etwas ausführlicher ???
+            print(
+                "DEBUG Retry-Analyse: stderr_buffer="
+                + str(len(stderr_text))
+                + " Zeichen"
+            )
+            _failing = self._extract_failing_page_from_stderr(stderr_text)
+            _is_gs = (
+                "Ghostscript rasterizing failed" in stderr_text
+                or "SubprocessOutputError" in stderr_text
+            )
+            print(
+                "DEBUG Retry-Check: is_gs_error="
+                + str(_is_gs)
+                + ", failing_page="
+                + str(_failing)
+                + ", retry="
+                + str(retry)
+                + "/"
+                + str(self.MAX_RETRIES)
+            )
+
+            last_error = stderr_text.strip() if stderr_text.strip() else "OCR fehlgeschlagen (unbekannter Fehler)"
+
+            # Ist es ein Ghostscript-Fehler?
+            failing_page = self._extract_failing_page_from_stderr(stderr_text)
+            is_gs_error = (
+                "Ghostscript rasterizing failed" in stderr_text
+                or "SubprocessOutputError" in stderr_text
+            )
+
+            if is_gs_error and failing_page is not None and retry < self.MAX_RETRIES:
+                # Seite schon einmal probiert?
+                if failing_page in self._tried_pages:
+                    print(
+                        "Seite "
+                        + str(failing_page)
+                        + " hat schon einmal versagt - Retry wird abgebrochen."
+                    )
+                    self.finished.emit(False, last_error)
+                    return False
+
+                self._tried_pages.add(failing_page)
+                retry += 1
+                print(
+                    "Ghostscript-Fehler auf Seite "
+                    + str(failing_page)
+                    + " erkannt - Seite wird als Bild eingebettet und erneut versucht."
+                )
+                self._emit_progress(
+                    self._max_progress_seen,
+                    self.tr_text("ocr_status_page_fallback").format(failing_page),
+                )
+                success_replace = self._replace_page_with_image(
+                    self._working_copy, failing_page, dpi=300
+                )
+                if not success_replace:
+                    print("Seiten-Ersetzung fehlgeschlagen, breche ab.")
+                    self.finished.emit(False, last_error)
+                    return False
+                continue  # naechster Retry
+
+            # Kein Ghostscript-Fehler oder keine Seite erkannt
+            print("OCR fehlgeschlagen (Code erreicht Limit). Letzter Fehler: " + last_error[:200])
+            self.finished.emit(False, last_error)
+            return False
+
+        # Nach MAX_RETRIES immer noch Fehler
+        self.finished.emit(False, last_error)
+        return False
+
+    # -------------------------------------------------------------
+    # Fortschrittsanalyse aus ocrmypdf-Log
+    # -------------------------------------------------------------
+
+    def _process_progress_line(self, line):
+        """
+        Analysiert eine Log-Zeile und emittiert ggf. ein Fortschritts-Update.
+        Die Zeilen enthalten ein Praefix wie 'DEBUG ocrmypdf.subprocess -'
+        oder 'DEBUG ocrmypdf.optimize -', deshalb duerfen die Regexe NICHT
+        mit '^' ankern.
+        """
+        try:
+            total = self._total_pages_for_progress or 0
+
+            def _page_suffix(page_num):
+                if total > 0 and page_num > 0:
+                    return " (" + str(page_num) + "/" + str(total) + ")"
+                return ""
+
+            # WICHTIG: Kein '^'-Anker, weil vor dem Muster das
+            # ocrmypdf-Log-Praefix steht.
+            # Format: 'DEBUG ocrmypdf.subprocess -   21  Running: [\'tesseract\', ...]'
+
+            # 1. Tesseract-OCR-Phase (hoechste Prioritaet)
+            if "'tesseract'" in line and "Running:" in line:
+                m = re.search(r"(\d+)\s+Running:\s*\[", line)
+                if m:
+                    page = int(m.group(1))
+                    if total > 0:
+                        pct = 5 + int(page / total * 55)
+                        self._emit_progress(
+                            min(pct, 60),
+                            self.tr_text("ocr_status_recognizing")
+                            + _page_suffix(page),
+                        )
+                    return
+
+            # 2. Ghostscript-Rasterize
+            if "'gs'" in line and "Running:" in line:
+                m = re.search(r"(\d+)\s+Running:\s*\[", line)
+                page = int(m.group(1)) if m else 0
+                self._emit_progress(
+                    max(5, self._max_progress_seen),
+                    self.tr_text("ocr_status_rasterizing") + _page_suffix(page),
+                )
+                return
+
+            # 3. Graft
+            if "Grafting" in line:
+                m = re.search(r"(\d+)\s+Grafting", line)
+                page = int(m.group(1)) if m else 0
+                self._emit_progress(
+                    60,
+                    self.tr_text("ocr_status_grafting") + _page_suffix(page),
+                )
+                return
+
+            # 4. Optimize
+            if "Recursing into Form XObject" in line:
+                m = re.search(r"in page (\d+)", line)
+                if m and total > 0:
+                    page = int(m.group(1))
+                    pct = 65 + int(page / total * 30)
+                    self._emit_progress(
+                        min(pct, 95),
+                        self.tr_text("ocr_status_optimizing") + _page_suffix(page),
+                    )
+                return
+
+            # 5. Postprocessing
+            if "Postprocessing" in line:
+                self._emit_progress(95, self.tr_text("ocr_status_postprocessing"))
+                return
+        except Exception:
+            pass
+
+    # -------------------------------------------------------------
+    # Monitoring (Warten auf Fertigstellung)
+    # -------------------------------------------------------------
 
     def _monitor_ocr(self, total_pages):
+        """
+        Wartet auf das Ende des ocrmypdf-Prozesses.
+        Gibt True zurueck, wenn Ausgabedatei existiert und valide ist.
+        """
+        self._total_pages_for_progress = total_pages
+
         start_time = time.time()
-        estimated_seconds = max(10, total_pages * 5)
+        last_progress_emit = time.time()
 
         while True:
             if self._is_canceled:
                 if self.process:
-                    self.process.terminate()
+                    try:
+                        self.process.terminate()
+                    except Exception:
+                        pass
                 return False
 
             returncode = self.process.poll()
@@ -10890,55 +12209,61 @@ class OCRThread(QThread):
                 output_exists = os.path.exists(self.output_path)
                 output_ok = output_exists and os.path.getsize(self.output_path) > 0
 
-                # Erfolg: returncode 0 oder 2 (Warnungen) und Ausgabedatei existiert
                 if returncode in [0, 2] and output_ok:
                     self.real_ocr_done = True
-                    self.progress_updated.emit(100)
+                    self._emit_progress(100, self.tr_text("ocr_status_done"))
                     return True
                 else:
                     error_msg = (
-                        stderr.strip() if stderr else f"Fehler mit Code {returncode}"
+                        stderr.strip() if stderr else "Fehler mit Code " + str(returncode)
                     )
-                    print(f"\n❌ OCR fehlgeschlagen (Code {returncode}):\n{error_msg}")
-                    print(
-                        f"DEBUG _monitor_ocr: sende finished mit success={False}, msg='{error_msg[:100]}'"
-                    )
-
-                    self.finished.emit(False, error_msg)
+                    print("OCR fehlgeschlagen (Code " + str(returncode) + ")")
+                    if len(error_msg) > 500:
+                        print("Fehler-Detail (gekuerzt): " + error_msg[:500])
+                    else:
+                        print("Fehler-Detail: " + error_msg)
+                    # finished wird im Retry-Loop emittiert
                     return False
 
-            elapsed = time.time() - start_time
-            progress = min(95, int((elapsed / estimated_seconds) * 95))
-            self.progress_updated.emit(progress)
+            # Alle 3 Sekunden ein sanfter Fortschrittsbump, damit der
+            # Nutzer sieht, dass es noch laeuft - aber nur wenn die
+            # Phasenanalyse bisher keinen Fortschritt gemeldet hat.
+            now = time.time()
+            if now - last_progress_emit > 3.0:
+                last_progress_emit = now
+                # Nur leicht erhoehen (max bis 90, damit nicht schon
+                # 100 angezeigt wird, bevor fertig)
+                bump = min(self._max_progress_seen + 1, 90)
+                # Bump sofort emittieren (auch wenn Debouncing aktiv)
+                self._last_emit_time = 0
+                self._emit_progress(bump, "")
             time.sleep(0.3)
-            # print(f"DEBUG: Progress {progress}%")
+
+    # -------------------------------------------------------------
+    # Standard-Hilfsmethoden
+    # -------------------------------------------------------------
 
     def _check_ocr_tools(self):
         if getattr(sys, "frozen", False):
-            # Bundle-Modus: Tesseract und ocrmypdf-Binary müssen existieren
             if not Config.TESSERACT_PATH or not os.path.exists(Config.TESSERACT_PATH):
-                print(f"❌ Tesseract nicht gefunden: {Config.TESSERACT_PATH}")
+                print("Tesseract nicht gefunden: " + str(Config.TESSERACT_PATH))
                 return False
             if not Config.OCRMYPDF_PATH or not os.path.exists(Config.OCRMYPDF_PATH):
-                print(f"❌ OCRmyPDF-Binary nicht gefunden: {Config.OCRMYPDF_PATH}")
+                print("OCRmyPDF-Binary nicht gefunden: " + str(Config.OCRMYPDF_PATH))
                 return False
             return True
         else:
-            # Entwicklungsmodus: alte Logik (externe Binary)
             if not Config.OCRMYPDF_PATH or not os.path.exists(Config.OCRMYPDF_PATH):
-                print(f"❌ OCRmyPDF nicht gefunden: {Config.OCRMYPDF_PATH}")
+                print("OCRmyPDF nicht gefunden: " + str(Config.OCRMYPDF_PATH))
                 return False
             if not Config.TESSERACT_PATH or not os.path.exists(Config.TESSERACT_PATH):
-                print(f"❌ Tesseract nicht gefunden: {Config.TESSERACT_PATH}")
+                print("Tesseract nicht gefunden: " + str(Config.TESSERACT_PATH))
                 return False
             return True
 
     def _prepare_environment(self):
         env = os.environ.copy()
-
-        # Bundle-Pfade (falls vorhanden)
         if getattr(sys, "frozen", False):
-            # PATH: zuerst Bundle-Bin, dann System
             bundle_bin = (
                 os.path.dirname(Config.TESSERACT_PATH)
                 if Config.TESSERACT_PATH
@@ -10946,31 +12271,28 @@ class OCRThread(QThread):
             )
             if bundle_bin:
                 env["PATH"] = bundle_bin + os.pathsep + env.get("PATH", "")
-            # DYLD_LIBRARY_PATH für Homebrew-Bibliotheken
             bundle_lib = (
-                os.path.join(os.path.dirname(bundle_bin), "lib") if bundle_bin else None
+                os.path.join(os.path.dirname(bundle_bin), "lib")
+                if bundle_bin
+                else None
             )
             if bundle_lib:
                 env["DYLD_LIBRARY_PATH"] = (
                     bundle_lib + os.pathsep + env.get("DYLD_LIBRARY_PATH", "")
                 )
-            # Tesseract-Kommando
             if Config.TESSERACT_PATH:
                 env["TESSERACT_CMD"] = Config.TESSERACT_PATH
-            # TESSDATA_PREFIX (nicht setzen, sonst Fehler)
             if "TESSDATA_PREFIX" in env:
                 del env["TESSDATA_PREFIX"]
         else:
-            # Entwicklungsmodus: normale Pfade
             if Config.TESSERACT_PATH:
                 env["TESSERACT_CMD"] = Config.TESSERACT_PATH
             if Config.POPPLER_PATH:
                 env["PATH"] = Config.POPPLER_PATH + os.pathsep + env.get("PATH", "")
-
         return env
 
     def cancel(self):
-        print(f"⏹️ OCR-Abbruch angefordert")
+        print("OCR-Abbruch angefordert")
         self._is_canceled = True
         self.canceled = True
 
@@ -10980,11 +12302,14 @@ class OCRThread(QThread):
                 time.sleep(0.3)
                 if self.process.poll() is None:
                     self.process.kill()
-            except Exception as e:
-                pass  # Keine Ausgabe mehr während des Shutdowns
+            except Exception:
+                pass
 
-        # Keine Aufrufe von PDFLogger mehr
-        # Keine prints mehr
+        if hasattr(self, "windows_ocr") and self.windows_ocr is not None:
+            try:
+                self.windows_ocr.cancel()
+            except Exception:
+                pass
 
     def _emit_success(self):
         if not os.path.exists(self.output_path):
@@ -10993,19 +12318,18 @@ class OCRThread(QThread):
 
         file_size = os.path.getsize(self.output_path)
         if not self._is_canceled:
-            print(f"✅ OCR ERFOLGREICH!")
-            print(f"📁 Datei: {self.output_path}")
-            print(f"📏 Größe: {file_size:,} Bytes")
+            print("OCR ERFOLGREICH")
+            print("Datei: " + self.output_path)
+            print("Groesse: " + str(file_size) + " Bytes")
 
         if self._is_valid_pdf(self.output_path):
             if not self._is_canceled:
-                print(f"📄 Ausgabe ist gültiges PDF")
+                print("Ausgabe ist gueltiges PDF")
             self.finished.emit(True, self.output_path)
-
         else:
             if not self._is_canceled:
-                print(f"⚠️  Ausgabe ist kein gültiges PDF")
-            self.finished.emit(False, "Ausgabedatei ist kein gültiges PDF")
+                print("Ausgabe ist kein gueltiges PDF")
+            self.finished.emit(False, "Ausgabedatei ist kein gueltiges PDF")
 
     def _is_valid_pdf(self, pdf_path):
         try:
@@ -11013,14 +12337,13 @@ class OCRThread(QThread):
             is_valid = len(doc) > 0
             doc.close()
             return is_valid
-        except:
+        except Exception:
             return False
 
     def safe_close(self):
         self.cancel()
 
     def _cleanup_tessconfig(self):
-        """Löscht die temporäre Tesseract-Konfigurationsdatei."""
         if (
             hasattr(self, "_tessconfig_path")
             and self._tessconfig_path
@@ -11028,11 +12351,9 @@ class OCRThread(QThread):
         ):
             try:
                 os.unlink(self._tessconfig_path)
-                print(
-                    f"🧹 Temporäre Konfigurationsdatei gelöscht: {self._tessconfig_path}"
-                )
-            except Exception as e:
-                pass  # Keine Ausgabe während des Shutdowns
+                print("Temporaere Konfigurationsdatei geloescht: " + self._tessconfig_path)
+            except Exception:
+                pass
             finally:
                 self._tessconfig_path = None
 
@@ -11044,18 +12365,49 @@ Der Dialog bleibt sichtbar und wirkt sich auf Windows aus: Die Einstellungen fü
 
 
 class WindowsOCRThread(QThread):
+    """Windows-spezifische OCR mit pytesseract + reportlab + pypdf.
+
+    Kann auf zwei Arten verwendet werden:
+      - Als eigener QThread:  .start()
+      - Synchron aus einem anderen QThread: .run_sync()
+    """
+
     progress_updated = pyqtSignal(int)
     finished = pyqtSignal(bool, str)
 
-    def __init__(self, input_path, output_path, dark_mode=True):
+    def __init__(
+        self,
+        input_path,
+        output_path,
+        dark_mode=True,
+        password=None,
+        lang=None,
+    ):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
+        self.dark_mode = dark_mode
+        self.password = password
+        self.lang = lang
         self._is_canceled = False
         self.real_ocr_done = False
         print(f"DEBUG: WindowsOCRThread init mit output_path={output_path}")
 
     def run(self):
+        """Wird bei start() in einem eigenen Thread ausgeführt."""
+        self._run_internal()
+
+    def run_sync(self):
+        """Führt die OCR synchron im aufrufenden Thread aus.
+        Verhindert, dass der aufrufende Thread (z. B. OCRThread) die
+        temporäre entschlüsselte Kopie löscht, bevor die OCR fertig ist.
+        """
+        self._run_internal()
+
+    def cancel(self):
+        self._is_canceled = True
+
+    def _run_internal(self):
         try:
             settings = QSettings("BinhDiez", "PDFDarkView")
             ocr_lang = settings.value("ocr_language", "deu+eng+vie")
@@ -11085,7 +12437,7 @@ class WindowsOCRThread(QThread):
                 return
             print(f"DEBUG: OCR abgeschlossen, {len(ocr_results)} Seiten")
 
-            # 3. PDF aus Bildern erstellen (fitz)
+            # 3. PDF aus Bildern erstellen
             self.progress_updated.emit(80)
             output_path = os.path.normpath(self.output_path)
             success, msg = self._create_searchable_pdf(ocr_results, output_path)
@@ -11093,7 +12445,6 @@ class WindowsOCRThread(QThread):
                 self.finished.emit(False, msg)
                 return
 
-            # Erfolg: setze real_ocr_done = True
             self.real_ocr_done = True
             self.progress_updated.emit(100)
             self.finished.emit(True, output_path)
@@ -11121,7 +12472,9 @@ class WindowsOCRThread(QThread):
                 zoom = dpi / 72.0
                 mat = fitz.Matrix(zoom, zoom)
                 pix = page.get_pixmap(matrix=mat)
-                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                img = Image.frombytes(
+                    "RGB", [pix.width, pix.height], pix.samples
+                )
                 images.append(img)
                 print(f"DEBUG: Seite {page_num+1} konvertiert (DPI={dpi})")
             doc.close()
@@ -11137,7 +12490,9 @@ class WindowsOCRThread(QThread):
 
         if getattr(sys, "frozen", False):
             base_path = sys._MEIPASS
-            tesseract_path = os.path.join(base_path, "tools", "bin", "tesseract.exe")
+            tesseract_path = os.path.join(
+                base_path, "tools", "bin", "tesseract.exe"
+            )
             if os.path.exists(tesseract_path):
                 pytesseract.pytesseract.tesseract_cmd = tesseract_path
                 print(f"DEBUG: Tesseract gefunden: {tesseract_path}")
@@ -11146,7 +12501,9 @@ class WindowsOCRThread(QThread):
 
         if getattr(sys, "frozen", False):
             base_path = sys._MEIPASS
-            tessdata_path = os.path.join(base_path, "default_data", "tessdata")
+            tessdata_path = os.path.join(
+                base_path, "default_data", "tessdata"
+            )
             if os.path.exists(tessdata_path):
                 os.environ["TESSDATA_PREFIX"] = tessdata_path
                 print(f"DEBUG: TESSDATA_PREFIX = {tessdata_path}")
@@ -11156,60 +12513,14 @@ class WindowsOCRThread(QThread):
         for i, img in enumerate(images):
             if self._is_canceled:
                 return None
-            text = pytesseract.image_to_string(img, lang=lang, config=custom_config)
+            text = pytesseract.image_to_string(
+                img, lang=lang, config=custom_config
+            )
             ocr_results.append({"page": i + 1, "text": text, "image": img})
             progress = 30 + int((i + 1) / total * 50)
             self.progress_updated.emit(progress)
             print(f"DEBUG: Seite {i+1}/{total} OCR abgeschlossen")
         return ocr_results
-
-    # nur Bilder kein Text
-    def _create_pdf_with_fitz(self, images, output_path):
-        import fitz
-        import io
-        from PIL import Image
-
-        try:
-            # Stelle sicher, dass das Zielverzeichnis existiert
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-            print(
-                f"DEBUG: Zielverzeichnis sichergestellt: {os.path.dirname(output_path)}"
-            )
-
-            doc = fitz.open()
-            for img in images:
-                # PIL Image in Bytes umwandeln
-                img_bytes = io.BytesIO()
-                if img.mode == "RGBA":
-                    img = img.convert("RGB")
-                img.save(img_bytes, format="JPEG", quality=90)
-                img_bytes.seek(0)
-
-                # Pixmap aus Bytes erstellen
-                pix = fitz.Pixmap(img_bytes.getvalue())
-                # Neue Seite mit Bildgröße
-                page = doc.new_page(width=pix.width, height=pix.height)
-                page.insert_image(page.rect, pixmap=pix)
-                pix = None  # Speicher freigeben
-
-            doc.save(output_path, garbage=4, deflate=True)
-            doc.close()
-
-            # Sofort nach dem Speichern prüfen
-            if os.path.exists(output_path):
-                file_size = os.path.getsize(output_path)
-                print(
-                    f"✅ PDF erstellt mit fitz: {output_path} (Größe: {file_size} Bytes)"
-                )
-                if file_size == 0:
-                    return False, "PDF ist leer (0 Bytes)"
-                return True, "OK"
-            else:
-                print(f"❌ Datei wurde nicht erstellt: {output_path}")
-                return False, "Datei nicht vorhanden nach dem Speichern"
-        except Exception as e:
-            print(f"❌ PDF-Erstellung mit fitz fehlgeschlagen: {e}")
-            return False, f"PDF-Erstellung fehlgeschlagen: {e}"
 
     def _create_searchable_pdf(self, ocr_results, output_path):
         from reportlab.pdfgen import canvas
@@ -11236,8 +12547,9 @@ class WindowsOCRThread(QThread):
             c = canvas.Canvas(packet, pagesize=(img.width, img.height))
             c.drawImage(temp_img_path, 0, 0, width=img.width, height=img.height)
 
+            # Unsichtbarer Text-Layer (Transparenz via weißer Textfarbe)
             c.saveState()
-            c.setFillColorRGB(1, 1, 1, 0)  # transparent
+            c.setFillColorRGB(1, 1, 1, 0)
             c.setFont("Helvetica", 10)
             y = img.height - 30
             lines = text.split("\n")
@@ -11254,12 +12566,11 @@ class WindowsOCRThread(QThread):
             if len(reader.pages) > 0:
                 writer.add_page(reader.pages[0])
 
-        # ===== NEU: Metadaten setzen =====
+        # Metadaten für den Windows-OCR-Marker
         writer.add_metadata(
             {
-                "/Producer": "PDFDarkView_WindowsOCR",  # eindeutige Kennung
+                "/Producer": "PDFDarkView_WindowsOCR",
                 "/Creator": "PDFDarkView",
-                "/WindowsOCR": "True",
             }
         )
 
@@ -11268,10 +12579,13 @@ class WindowsOCRThread(QThread):
         with open(output_path, "wb") as f:
             writer.write(f)
 
+        # KEINE Re-Verschlüsselung hier – der Parent (OCRThread/ocr_completed)
+        # übernimmt das für die finale Datei.
+
         for f in temp_files:
             try:
                 os.unlink(f)
-            except:
+            except Exception:
                 pass
 
         if os.path.exists(output_path) and os.path.getsize(output_path) > 0:
@@ -11288,10 +12602,11 @@ class WindowsOCRThread(QThread):
 class PDFMetadataDialog(QDialog):
     """Dialog zum Bearbeiten aller Metadaten einer PDF-Datei."""
 
-    def __init__(self, parent=None, pdf_path=None):
+    def __init__(self, parent=None, pdf_path=None, password=None):
         super().__init__(parent)
         self.parent = parent
         self.pdf_path = pdf_path
+        self.password = password
         self.current_doc = None
 
         # Language-Instanz vom Hauptfenster übernehmen
@@ -11325,13 +12640,29 @@ class PDFMetadataDialog(QDialog):
         self.init_ui()
         self.load_values()
 
+    def _open_pdf(self, path):
+        """
+        Öffnet eine PDF und authentifiziert sie, wenn nötig.
+        Eigene Implementierung – der Dialog ist NICHT der PDFViewer.
+        """
+        doc = fitz.open(path)
+        if doc.is_encrypted or doc.needs_pass:
+            if self.password:
+                if not doc.authenticate(self.password):
+                    doc.close()
+                    raise Exception(self.lang.tr("password_wrong"))
+            else:
+                doc.close()
+                raise Exception(self.lang.tr("pdf_encrypted"))
+        return doc
+
     def load_metadata_from_pdf(self):
         """Lädt die Metadaten aus der PDF-Datei."""
         if not self.pdf_path or not os.path.exists(self.pdf_path):
             return
 
         try:
-            self.current_doc = fitz.open(self.pdf_path)
+            self.current_doc = self._open_pdf(self.pdf_path)
             self.metadata = self.current_doc.metadata or {}
         except Exception as e:
             print(f"Fehler beim Laden der Metadaten: {e}")
@@ -11663,20 +12994,12 @@ class PDFMetadataDialog(QDialog):
             # Seitenzahl
             self.pages_value.setText(str(self.current_doc.page_count))
 
-            # PDF-Version - Korrekte Methode für PyMuPDF
+            # PDF-Version
             try:
-                # Version aus den Metadaten oder direkt aus dem Dokument
-                if (
-                    hasattr(self.current_doc, "metadata")
-                    and "format" in self.current_doc.metadata
-                ):
-                    pdf_version = self.current_doc.metadata.get("format", "Unknown")
-                elif hasattr(self.current_doc, "pdf_version"):
-                    pdf_version = self.current_doc.pdf_version
-                else:
-                    # Alternative: Versuche die Version aus der Datei zu lesen
-                    import struct
-
+                metadata = self.current_doc.metadata or {}
+                pdf_version = metadata.get("format")
+                if not pdf_version:
+                    # Fallback: aus Dateiheader lesen
                     with open(self.pdf_path, "rb") as f:
                         header = f.read(8)
                         if header.startswith(b"%PDF-"):
@@ -11739,53 +13062,61 @@ class PDFMetadataDialog(QDialog):
                 self.current_doc.close()
                 self.current_doc = None
 
-            # Dokument neu öffnen
-            doc = fitz.open(self.pdf_path)
+            # Dokument neu öffnen – mit Authentifizierung
+            doc = self._open_pdf(self.pdf_path)
 
-            # Metadaten aktualisieren
+            # Verschlüsselungsstatus merken (bevor die Datei geschrieben wird)
+            was_encrypted = bool(doc.is_encrypted or doc.needs_pass)
+
+            # Metadaten zusammenstellen
             metadata = {}
-
             if self.title_edit.text().strip():
                 metadata["title"] = self.title_edit.text().strip()
-
             if self.author_edit.text().strip():
                 metadata["author"] = self.author_edit.text().strip()
-
             if self.subject_edit.text().strip():
                 metadata["subject"] = self.subject_edit.text().strip()
-
             if self.keywords_edit.text().strip():
                 metadata["keywords"] = self.keywords_edit.text().strip()
-
             if self.creator_edit.text().strip():
                 metadata["creator"] = self.creator_edit.text().strip()
-
             if self.producer_edit.text().strip():
                 metadata["producer"] = self.producer_edit.text().strip()
-
-            # Datumsfelder
             metadata["creationDate"] = self.format_pdf_date(
                 self.creation_date_edit.dateTime()
             )
-            metadata["modDate"] = self.format_pdf_date(self.mod_date_edit.dateTime())
+            metadata["modDate"] = self.format_pdf_date(
+                self.mod_date_edit.dateTime()
+            )
 
-            # Metadaten setzen
             doc.set_metadata(metadata)
 
-            # In temporäre Datei speichern, dann ersetzen
+            # In temporäre Datei speichern
             import tempfile
             import shutil
 
             fd, temp_path = tempfile.mkstemp(suffix=".pdf", prefix="metadata_")
             os.close(fd)
 
-            doc.save(temp_path, garbage=4, deflate=True)
-            doc.close()
+            # Verschlüsselung beibehalten, wenn Original verschlüsselt war
+            if was_encrypted:
+                doc.save(
+                    temp_path,
+                    garbage=4,
+                    deflate=True,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=self.password,
+                    owner_pw=self.password,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                )
+            else:
+                doc.save(temp_path, garbage=4, deflate=True)
 
+            doc.close()
             shutil.move(temp_path, self.pdf_path)
 
             # Dokument neu öffnen für die Anzeige
-            self.current_doc = fitz.open(self.pdf_path)
+            self.current_doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
             self.metadata = self.current_doc.metadata or {}
 
             # Erfolgsmeldung
@@ -13089,13 +14420,34 @@ class DeletePagesDialog(QDialog):
         self.empty_pages_radio.setFocus()
 
     def say(self, message, force=False, convert_numbers=False):
-        if self.parent and hasattr(self.parent, "say"):
-            self.parent.say(message, force, convert_numbers)
-        else:
+        """Delegiert an Parent, wenn möglich. Andernfalls robust sprechen."""
+        if not message:
+            return
+        parent = getattr(self, "parent", None)
+        if callable(parent):
             try:
-                os.system(f'say "{message}" &')
-            except:
-                pass
+                parent = parent()
+            except Exception:
+                parent = None
+        if parent is not None and hasattr(parent, "say"):
+            try:
+                parent.say(message, force=force, convert_numbers=convert_numbers)
+                return
+            except Exception as e:
+                print(f"[say] Parent-Delegation fehlgeschlagen: {e}")
+
+        # Fallback: direkt sprechen (sprachrichtig!)
+        try:
+            lang_code = _detect_lang_code(self)
+            rate = int(175 * getattr(self, "voice_speed", 1.0))
+            _speak_message(
+                message,
+                lang_code=lang_code,
+                rate=rate,
+                engine_holder=self,
+            )
+        except Exception as e:
+            print(f"Fehler bei Sprachausgabe: {e}")
 
     def narrate_focus(self, message):
         if self.parent and hasattr(self.parent, "narrate_focus"):
@@ -13192,7 +14544,7 @@ class DeletePagesWorker(QThread):
     finished = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, pdf_path, selection, lang, create_backup, suffix):
+    def __init__(self, pdf_path, selection, lang, create_backup, suffix, password=None):
         super().__init__()
         ShutdownRegistry.register(self)
         self.pdf_path = pdf_path
@@ -13200,6 +14552,8 @@ class DeletePagesWorker(QThread):
         self.lang = lang
         self.create_backup = create_backup
         self.suffix = suffix
+        self.password = password
+
         self._cancel = False
         self._is_canceled = False
 
@@ -13234,7 +14588,13 @@ class DeletePagesWorker(QThread):
                 self.lang.tr("progress_opening_pdf"),
                 self.lang.tr("progress_loading_document"),
             )
-            doc = fitz.open(self.pdf_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(
+                self.pdf_path,
+                password=self.password,
+                lang=getattr(self, "lang", None),
+            )
+
             total_pages = len(doc)
             self.progress_updated.emit(
                 5,
@@ -13267,7 +14627,9 @@ class DeletePagesWorker(QThread):
                 self.progress_updated.emit(
                     15,
                     self.lang.tr("progress_backup_created"),
-                    self.lang.tr("progress_backup_saved_as", os.path.basename(backup_path)),
+                    self.lang.tr(
+                        "progress_backup_saved_as", os.path.basename(backup_path)
+                    ),
                 )
             else:
                 base_clean = FilenameGenerator.clean_base_name(
@@ -13307,11 +14669,15 @@ class DeletePagesWorker(QThread):
                     if is_empty:
                         pages_to_delete.append(i)
                         self.progress_updated.emit(
-                            progress, self.lang.tr("progress_page_empty", i + 1), reason
+                            progress,
+                            self.lang.tr("progress_page_empty", i + 1),
+                            reason,
                         )
                     else:
                         self.progress_updated.emit(
-                            progress, self.lang.tr("progress_page_keep", i + 1), reason
+                            progress,
+                            self.lang.tr("progress_page_keep", i + 1),
+                            reason,
                         )
                 self.progress_updated.emit(
                     85,
@@ -13340,16 +14706,18 @@ class DeletePagesWorker(QThread):
 
             # --- Neue Zweige für gerade / ungerade Seiten ---
             elif self.selection == "even":
-                # gerade Seiten (1-basiert) → Index (i+1) % 2 == 0
-                pages_to_delete = [i for i in range(total_pages) if (i + 1) % 2 == 0]
+                pages_to_delete = [
+                    i for i in range(total_pages) if (i + 1) % 2 == 0
+                ]
                 self.progress_updated.emit(
                     50,
                     self.lang.tr("progress_even_pages"),
                     self.lang.tr("progress_mark_delete_even", len(pages_to_delete)),
                 )
             elif self.selection == "odd":
-                # ungerade Seiten (1-basiert) → Index (i+1) % 2 == 1
-                pages_to_delete = [i for i in range(total_pages) if (i + 1) % 2 == 1]
+                pages_to_delete = [
+                    i for i in range(total_pages) if (i + 1) % 2 == 1
+                ]
                 self.progress_updated.emit(
                     50,
                     self.lang.tr("progress_odd_pages"),
@@ -13399,6 +14767,15 @@ class DeletePagesWorker(QThread):
                 if self._is_canceled:
                     raise Exception("Löschvorgang abgebrochen")
 
+                # Metadaten: erst Original kopieren
+                copy_pdf_metadata(doc, new_doc)
+                # persönliche ergänzen
+                apply_personal_metadata(
+                    new_doc,
+                    action_label=self.suffix,
+                    password=getattr(self, "password", None),
+                )
+
                 # 7. Speichern
                 self.progress_updated.emit(
                     95,
@@ -13417,9 +14794,19 @@ class DeletePagesWorker(QThread):
                     if self.create_backup:
                         os.replace(temp_path, self.pdf_path)
                         result["edited_path"] = self.pdf_path
+                        _final_path = self.pdf_path
                     else:
                         shutil.move(temp_path, new_path)
                         result["edited_path"] = new_path
+                        _final_path = new_path
+
+                    # >>> Verschlüsselung wiederherstellen
+                    reencrypt_pdf_with_password(
+                        _final_path,
+                        getattr(self, "password", None),
+                        lang=getattr(self, "lang", None),
+                    )
+
                     result["deleted_count"] = delete_count
                     result["success"] = True
                     result["kept_pages"] = kept_pages
@@ -14226,12 +15613,12 @@ class InsertPagesDialog(QDialog):
         self.parent = parent
         self.total_pages = total_pages
         self.pdf_to_insert = None
+        self.insert_password = None
 
         # Language-Instanz vom Hauptfenster übernehmen
         if parent and hasattr(parent, "lang"):
             self.lang = parent.lang
         else:
-
             self.lang = Language()
 
         self.init_ui()
@@ -14240,7 +15627,7 @@ class InsertPagesDialog(QDialog):
     def init_ui(self):
         self.setWindowTitle(
             "PDFDarkView by BinhDiez - " + self.lang.tr("pages_insert")
-        )  # Original: "Seiten einfügen"
+        )
         self.setMinimumWidth(450)
         self.setMinimumHeight(450)
 
@@ -14249,13 +15636,12 @@ class InsertPagesDialog(QDialog):
         main_layout.setContentsMargins(10, 5, 10, 10)
         self.setLayout(main_layout)
 
-        # Kopfzeile (wie in anderen Dialogen)
+        # Kopfzeile
         header = QWidget()
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(0, 0, 0, 15)
         header_layout.setSpacing(10)
 
-        # linker Stretch → zieht alles zur Mitte
         header_layout.addStretch(1)
 
         if os.path.exists(Config.IMAGE_PATH):
@@ -14269,9 +15655,7 @@ class InsertPagesDialog(QDialog):
 
             header_layout.addStretch(1)
 
-        self.title_label = QLabel(
-            self.lang.tr("pages_insert")
-        )  # Original: "Seiten einfügen"
+        self.title_label = QLabel(self.lang.tr("pages_insert"))
         self.title_label.setStyleSheet("""
             QLabel {
                 color: white;
@@ -14293,15 +15677,12 @@ class InsertPagesDialog(QDialog):
             self.icon_label.setAlignment(Qt.AlignVCenter)
             header_layout.addWidget(self.icon_label)
 
-        # rechter Stretch → hält die Gruppe zentriert
         header_layout.addStretch(1)
 
         main_layout.addWidget(header)
 
         # Eingabegruppe
-        input_group = QGroupBox(
-            self.lang.tr("pages_insert_position")
-        )  # Original: "Einfügeposition und PDF-Auswahl"
+        input_group = QGroupBox(self.lang.tr("pages_insert_position"))
         input_group.setStyleSheet("""
             QGroupBox {
                 font-size: 14px;
@@ -14317,9 +15698,7 @@ class InsertPagesDialog(QDialog):
 
         # Positionseingabe
         pos_layout = QHBoxLayout()
-        pos_label = QLabel(
-            self.lang.tr("pages_insert_before") + ":"
-        )  # Original: "Einfügen vor Seite:"
+        pos_label = QLabel(self.lang.tr("pages_insert_before") + ":")
         pos_label.setStyleSheet("font-size: 14px;")
         pos_layout.addWidget(pos_label)
 
@@ -14334,16 +15713,12 @@ class InsertPagesDialog(QDialog):
         input_layout.addLayout(pos_layout)
 
         # PDF-Auswahl
-        self.pdf_label = QLabel(
-            self.lang.tr("pages_insert_none")
-        )  # Original: "Keine PDF ausgewählt"
+        self.pdf_label = QLabel(self.lang.tr("pages_insert_none"))
         self.pdf_label.setStyleSheet(
             "color: #AAAAAA; font-style: italic; font-size: 14px;"
         )
 
-        select_label = QLabel(
-            self.lang.tr("pages_insert_select") + ":"
-        )  # Original: "Aus PDF:"
+        select_label = QLabel(self.lang.tr("pages_insert_select") + ":")
         select_label.setStyleSheet("font-size: 14px;")
         input_layout.addWidget(select_label)
         input_layout.addWidget(self.pdf_label)
@@ -14354,23 +15729,18 @@ class InsertPagesDialog(QDialog):
         # Buttons
         button_box = QHBoxLayout()
 
-        # Original: "PDF auswählen"
         self.btn_choose = QPushButton(self.lang.tr("pages_insert_select"))
         self.parent.style_button(self.btn_choose, "primary", (160, 25))
         self.btn_choose.clicked.connect(self.choose_pdf)
         self.btn_choose.setFocusPolicy(Qt.StrongFocus)
         input_layout.addWidget(self.btn_choose)
 
-        self.btn_cancel = QPushButton(
-            self.lang.tr("btn_cancel")
-        )  # Original: "Abbrechen"
+        self.btn_cancel = QPushButton(self.lang.tr("btn_cancel"))
         self.parent.style_button(self.btn_cancel, "danger", (160, 25))
         self.btn_cancel.clicked.connect(self.reject)
         self.btn_cancel.setFocusPolicy(Qt.StrongFocus)
 
-        self.btn_ok = QPushButton(
-            self.lang.tr("pages_insert")
-        )  # Original: "Seiten einfügen"
+        self.btn_ok = QPushButton(self.lang.tr("pages_insert"))
         self.parent.style_button(self.btn_ok, "primary", (160, 25))
         self.btn_ok.clicked.connect(self.validate)
         self.btn_ok.setFocusPolicy(Qt.StrongFocus)
@@ -14382,17 +15752,14 @@ class InsertPagesDialog(QDialog):
 
     def setup_keyboard_navigation(self):
         """Richtet Tastatursteuerung ein"""
-        # ✅ ESC schließt den Dialog
         self.escape_shortcut = QShortcut(QKeySequence("Esc"), self)
         self.escape_shortcut.activated.connect(self.reject)
 
-        # ✅ Tab-Reihenfolge festlegen (zyklisch)
         self.setTabOrder(self.position_spin, self.btn_choose)
         self.setTabOrder(self.btn_choose, self.btn_cancel)
         self.setTabOrder(self.btn_cancel, self.btn_ok)
-        self.setTabOrder(self.btn_ok, self.position_spin)  # Zyklisch
+        self.setTabOrder(self.btn_ok, self.position_spin)
 
-        # ✅ Fokus-Style für alle Buttons
         for btn in [self.btn_choose, self.btn_cancel, self.btn_ok]:
             current_style = btn.styleSheet()
             if "QPushButton:focus" not in current_style:
@@ -14406,7 +15773,6 @@ class InsertPagesDialog(QDialog):
 
     def keyPressEvent(self, event):
         """Tastaturnavigation"""
-        # ✅ Pfeiltasten für horizontale Navigation zwischen Buttons
         if event.key() == Qt.Key_Left:
             current = self.focusWidget()
             if current == self.btn_ok:
@@ -14418,7 +15784,7 @@ class InsertPagesDialog(QDialog):
                 event.accept()
                 return
             elif current == self.btn_choose:
-                self.btn_ok.setFocus()  # Zyklisch
+                self.btn_ok.setFocus()
                 event.accept()
                 return
 
@@ -14433,11 +15799,10 @@ class InsertPagesDialog(QDialog):
                 event.accept()
                 return
             elif current == self.btn_ok:
-                self.btn_choose.setFocus()  # Zyklisch
+                self.btn_choose.setFocus()
                 event.accept()
                 return
 
-        # ✅ Tab-Taste (vorwärts)
         elif event.key() == Qt.Key_Tab:
             current = self.focusWidget()
             widget_order = [
@@ -14456,7 +15821,6 @@ class InsertPagesDialog(QDialog):
             except (ValueError, AttributeError):
                 pass
 
-        # ✅ Shift+Tab (rückwärts)
         elif event.key() == Qt.Key_Backtab:
             current = self.focusWidget()
             widget_order = [
@@ -14475,7 +15839,6 @@ class InsertPagesDialog(QDialog):
             except (ValueError, AttributeError):
                 pass
 
-        # ✅ Enter aktiviert fokussierten Button
         elif event.key() in (Qt.Key_Return, Qt.Key_Enter):
             current = self.focusWidget()
             if current == self.btn_ok:
@@ -14497,29 +15860,136 @@ class InsertPagesDialog(QDialog):
         """Wird aufgerufen wenn der Dialog angezeigt wird"""
         super().showEvent(event)
 
-        # ✅ Sprachausgabe für Barrierefreiheit
         self.say(
-            self.lang.tr("pages_insert") + " " + self.lang.tr("pages_insert_position")
+            self.lang.tr("pages_insert")
+            + " "
+            + self.lang.tr("pages_insert_position")
         )
 
-        # ✅ Ersten Fokus setzen
         QTimer.singleShot(100, self.set_initial_focus)
 
     def set_initial_focus(self):
         """Setzt den initialen Fokus"""
         self.position_spin.setFocus()
 
+    def _is_encrypted(self, path):
+        """Prüft, ob eine PDF verschlüsselt ist. Bei Fehler: konservativ True."""
+        try:
+            import fitz
+
+            doc = fitz.open(path)
+            enc = bool(doc.is_encrypted or doc.needs_pass)
+            doc.close()
+            return enc
+        except Exception:
+            return True
+
+    def _show_insert_encrypted_error(self, path):
+        """Zeigt die Merge-Meldung für verschlüsselte Einfüge-PDFs."""
+        myUniversalDialog(
+            self,
+            title=self.lang.tr("merge_encrypted_title"),
+            message=(
+                self.lang.tr("merge_encrypted_file", os.path.basename(path))
+                + "\n\n"
+                + self.lang.tr("merge_encrypted_hint")
+            ),
+            buttons=[(self.lang.tr("btn_ok"), "primary", "ok")],
+            icon_type="",
+            voice_message=self.lang.tr("merge_encrypted_not_allowed"),
+            text_alignment=Qt.AlignLeft,
+        ).exec_()
+
     def choose_pdf(self):
+        """PDF auswählen und bei Verschlüsselung Passwort abfragen.
+
+        Reihenfolge: gespeichertes Passwort → PasswordDialog.
+        Bei Misserfolg/Abbruch wird die Datei abgelehnt und dieselbe
+        Meldung wie beim Merge angezeigt.
+        """
         path, _ = QFileDialog.getOpenFileName(
             self,
             self.lang.tr("pages_insert_select"),
             "",
-            "PDF Dateien (*.pdf)",  # Original: "PDF auswählen"
+            "PDF Dateien (*.pdf)",
         )
-        if path:
+        if not path:
+            return
+
+        # Nicht verschlüsselt → sofort übernehmen
+        if not self._is_encrypted(path):
             self.pdf_to_insert = path
+            self.insert_password = None
             self.pdf_label.setText(os.path.basename(path))
             self.pdf_label.setStyleSheet("color: #E0E0E0; font-style: normal;")
+            return
+
+        # Verschlüsselt: gespeichertes Passwort probieren
+        saved_pw = PDFPasswordManager.get_saved_password(path)
+        if saved_pw:
+            try:
+                import fitz
+
+                probe = fitz.open(path)
+                ok = probe.authenticate(saved_pw)
+                probe.close()
+                if ok:
+                    self.pdf_to_insert = path
+                    self.insert_password = saved_pw
+                    self.pdf_label.setText(os.path.basename(path))
+                    self.pdf_label.setStyleSheet(
+                        "color: #E0E0E0; font-style: normal;"
+                    )
+                    print(
+                        f"DEBUG: Insert-PDF mit gespeichertem Passwort geöffnet: "
+                        f"{os.path.basename(path)}"
+                    )
+                    return
+            except Exception:
+                pass
+
+        # PasswordDialog anzeigen – modal über dem InsertDialog
+        pw_dialog = PasswordDialog(self, path, saved_pw)
+        pw_dialog.setWindowModality(Qt.ApplicationModal)
+        pw_dialog.raise_()
+        pw_dialog.activateWindow()
+
+        if pw_dialog.exec_() != QDialog.Accepted:
+            self._show_insert_encrypted_error(path)
+            return
+
+        action = getattr(pw_dialog, "action", None)
+        pw = getattr(pw_dialog, "password", None)
+
+        if action in ("open", "use_saved") and pw:
+            try:
+                import fitz
+
+                probe = fitz.open(path)
+                ok = probe.authenticate(pw)
+                probe.close()
+                if not ok:
+                    self._show_insert_encrypted_error(path)
+                    return
+            except Exception:
+                self._show_insert_encrypted_error(path)
+                return
+
+            if action == "open":
+                try:
+                    if pw_dialog.save_checkbox.isChecked():
+                        PDFPasswordManager.save_password(path, pw)
+                except Exception:
+                    pass
+
+            self.pdf_to_insert = path
+            self.insert_password = pw
+            self.pdf_label.setText(os.path.basename(path))
+            self.pdf_label.setStyleSheet("color: #E0E0E0; font-style: normal;")
+            return
+
+        # Alle anderen Fälle → ablehnen
+        self._show_insert_encrypted_error(path)
 
     def say(self, message, force=False):
         """Verwendet die Sprachausgabe des Hauptfensters"""
@@ -14535,12 +16005,8 @@ class InsertPagesDialog(QDialog):
         if not self.pdf_to_insert:
             dialog = myUniversalDialog(
                 self.parent,
-                title=self.lang.tr(
-                    "pages_no_pdf_selected"
-                ),  # Original: "Keine PDf geladen"
-                message=self.lang.tr(
-                    "pages_no_pdf_selected"
-                ),  # Original: "Es ist keine PDf ausgewählt."
+                title=self.lang.tr("pages_no_pdf_selected"),
+                message=self.lang.tr("pages_no_pdf_selected"),
                 buttons=[(self.lang.tr("btn_ok"), "success", "ok")],
                 icon_type="",
                 voice_message=self.lang.tr("pages_no_pdf_selected"),
@@ -14554,8 +16020,8 @@ class InsertPagesDialog(QDialog):
         return {
             "position": self.position_spin.value() - 1,
             "pdf_path": self.pdf_to_insert,
+            "insert_password": self.insert_password,
         }
-
 
 # ================================================
 # MEHRERE PDFs ZUSAMMENFÜHREN (mit Sortierung)
@@ -14737,10 +16203,58 @@ class MergePDFsDialog(QDialog):
         QShortcut(QKeySequence("Delete"), self, self.remove_selected)
 
     def add_pdfs(self):
-        """Fügt eine oder mehrere PDFs zur Liste hinzu"""
+        """Fügt eine oder mehrere PDFs zur Liste hinzu.
+        Geschützte PDFs werden abgelehnt (Merge erwartet ungeschützte Quellen).
+        """
         paths, _ = QFileDialog.getOpenFileNames(
             self, self.lang.tr("merge_select_pdfs"), "", "PDF Dateien (*.pdf)"
         )
+
+        rejected = []
+        for path in paths:
+            if path in [p for p, _ in self.pdf_files]:
+                continue
+
+            # Verschlüsselung prüfen
+            if self._is_encrypted(path):
+                rejected.append(os.path.basename(path))
+                continue
+
+            display_name = f"{len(self.pdf_files) + 1}. {os.path.basename(path)}"
+            self.pdf_files.append((path, display_name))
+            self.list_widget.addItem(display_name)
+
+        self._update_info()
+
+        if rejected:
+            msg_lines = [
+                self.lang.tr("merge_encrypted_not_allowed"),
+                "",
+            ]
+            for name in rejected:
+                msg_lines.append(f"• {name}")
+            msg_lines.append("")
+            msg_lines.append(self.lang.tr("merge_encrypted_hint"))
+
+            myUniversalDialog(
+                self,
+                title=self.lang.tr("merge_encrypted_title"),
+                message="\n".join(msg_lines),
+                buttons=[(self.lang.tr("btn_ok"), "primary", "ok")],
+                icon_type="",
+                voice_message=self.lang.tr("merge_encrypted_not_allowed"),
+                text_alignment=Qt.AlignLeft,
+            ).exec_()
+
+    def _is_encrypted(self, path):
+        """Prüft, ob eine PDF verschlüsselt ist. Bei Fehler: konservativ True."""
+        try:
+            doc = fitz.open(path)
+            enc = bool(doc.is_encrypted or doc.needs_pass)
+            doc.close()
+            return enc
+        except Exception:
+            return True
 
         for path in paths:
             if path not in [p for p, _ in self.pdf_files]:
@@ -14881,7 +16395,17 @@ class MergePDFsDialog(QDialog):
 
 
 class MergePDFsWorker(QThread):
-    """Worker-Thread für das Zusammenführen von PDFs (alle Seiten aller PDFs)"""
+    """Worker-Thread für das Zusammenführen von PDFs (alle Seiten aller PDFs).
+
+    Erwartet ausschließlich UNGESCHÜTZTE PDFs. Der Dialog filtert verschlüsselte
+    Dateien bereits beim Hinzufügen. Zur Sicherheit prüft der Worker trotzdem
+    jede Datei und bricht bei Verschlüsselung mit klarer Meldung ab.
+
+    Metadaten:
+    - Die Metadaten der ERSTEN Quelldatei dienen als Basis.
+    - Nach dem Zusammenführen wird der persönliche Eintrag EINMAL ergänzt.
+    - Die Ergebnis-PDF ist unverschlüsselt.
+    """
 
     progress_updated = pyqtSignal(int, str, str)
     finished = pyqtSignal(dict)
@@ -14890,7 +16414,7 @@ class MergePDFsWorker(QThread):
     def __init__(self, selection, output_path, lang, create_backup):
         super().__init__()
         ShutdownRegistry.register(self)
-        self.selection = selection  # {'pdf_files': [...], 'open_after': bool}
+        self.selection = selection
         self.output_path = output_path
         self.lang = lang
         self.create_backup = create_backup
@@ -14916,18 +16440,19 @@ class MergePDFsWorker(QThread):
             total_files = len(pdf_files)
             result["file_count"] = total_files
 
-            self.progress_updated.emit(0, self.lang.tr("merge_preparing"), "")
+            self.progress_updated.emit(
+                0, self.lang.tr("merge_preparing"), ""
+            )
 
             new_doc = fitz.open()
             total_pages_merged = 0
+            first_doc_for_metadata = None
 
             for idx, (pdf_path, _) in enumerate(pdf_files):
                 if self._cancel:
                     raise Exception(self.lang.tr("merge_cancelled"))
 
-                percent = int(
-                    (idx / total_files) * 90
-                )  # 90% für Verarbeitung, 10% für Speichern
+                percent = int((idx / total_files) * 90)
                 self.progress_updated.emit(
                     percent,
                     self.lang.tr("merge_processing", idx + 1, total_files),
@@ -14937,22 +16462,65 @@ class MergePDFsWorker(QThread):
                 doc = None
                 try:
                     doc = fitz.open(pdf_path)
+
+                    # Sicherheitsprüfung: verschlüsselte PDFs ablehnen
+                    if doc.is_encrypted or doc.needs_pass:
+                        doc.close()
+                        raise Exception(
+                            self.lang.tr(
+                                "merge_encrypted_file",
+                                os.path.basename(pdf_path),
+                            )
+                        )
+
                     total_pages = len(doc)
                     total_pages_merged += total_pages
 
-                    # Alle Seiten der aktuellen PDF einfügen
+                    # Beim ersten Dokument Metadaten als Basis merken
+                    if first_doc_for_metadata is None:
+                        first_doc_for_metadata = doc
+
+                    # Seiten übernehmen
                     new_doc.insert_pdf(doc)
-                    doc.close()
+
+                    # Erstes Dokument NICHT schließen – wird später für
+                    # Metadatenkopie gebraucht
+                    if doc is not first_doc_for_metadata:
+                        doc.close()
 
                 except Exception as e:
-                    if doc:
-                        doc.close()
+                    if doc and doc is not first_doc_for_metadata:
+                        try:
+                            doc.close()
+                        except Exception:
+                            pass
                     raise Exception(
-                        f"{self.lang.tr('merge_error_file')}: {os.path.basename(pdf_path)} - {str(e)}"
+                        f"{self.lang.tr('merge_error_file')}: "
+                        f"{os.path.basename(pdf_path)} - {str(e)}"
                     )
 
             if self._cancel:
                 raise Exception(self.lang.tr("merge_cancelled"))
+
+            # Metadaten: Basis aus erstem Dokument, dann persönlicher Eintrag
+            if first_doc_for_metadata is not None:
+                try:
+                    copy_pdf_metadata(first_doc_for_metadata, new_doc)
+                except Exception as me:
+                    print(f"WARN: Metadaten kopieren fehlgeschlagen: {me}")
+                try:
+                    first_doc_for_metadata.close()
+                except Exception:
+                    pass
+
+            try:
+                apply_personal_metadata(
+                    new_doc,
+                    action_label=self.lang.tr("merge_pdfs"),
+                    password=None,
+                )
+            except Exception as me:
+                print(f"WARN: Persönliche Metadaten fehlgeschlagen: {me}")
 
             # Speichern
             self.progress_updated.emit(95, self.lang.tr("merge_saving"), "")
@@ -14972,7 +16540,7 @@ class MergePDFsWorker(QThread):
             if new_doc:
                 try:
                     new_doc.close()
-                except:
+                except Exception:
                     pass
 
 
@@ -15361,7 +16929,7 @@ class MovePagesWorker(QThread):
     finished = pyqtSignal(dict)
     error_occurred = pyqtSignal(str)
 
-    def __init__(self, pdf_path, selection, lang, create_backup, suffix):
+    def __init__(self, pdf_path, selection, lang, create_backup, suffix, password=None):
         super().__init__()
         ShutdownRegistry.register(self)
         self.pdf_path = pdf_path
@@ -15369,6 +16937,7 @@ class MovePagesWorker(QThread):
         self.lang = lang
         self.create_backup = create_backup
         self.suffix = suffix
+        self.password = password
         self._cancel = False
         self._is_canceled = False
 
@@ -15410,7 +16979,13 @@ class MovePagesWorker(QThread):
                 self.lang.tr("progress_opening_pdf"),
                 self.lang.tr("progress_loading_document"),
             )
-            doc = fitz.open(self.pdf_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(
+                self.pdf_path,
+                password=self.password,
+                lang=getattr(self, "lang", None),
+            )
+
             total_pages = len(doc)
 
             from_page = self.selection["from_page"] - 1
@@ -15552,6 +17127,14 @@ class MovePagesWorker(QThread):
                 self.lang.tr("progress_saving_pdf"),
                 self.lang.tr("progress_optimizing"),
             )
+
+            ### METADATEN ======================
+            # A Original-Metadaten auf new_doc übertragen
+            copy_pdf_metadata(doc, new_doc)
+            # B Metadaten mit persönlichem Eintrag ergänzen (auf new_doc, NICHT auf doc)
+            apply_personal_metadata(
+                new_doc, action_label=self.suffix, password=self.password
+            )
             new_doc.save(temp_path, garbage=4, deflate=True)
 
             if os.path.exists(temp_path):
@@ -15566,10 +17149,19 @@ class MovePagesWorker(QThread):
                 if self.create_backup:
                     os.replace(temp_path, self.pdf_path)
                     result["edited_path"] = self.pdf_path
+                    _final_path = self.pdf_path
                 else:
                     # Neue Datei an vorbereiteten Pfad verschieben
                     shutil.move(temp_path, new_path)
                     result["edited_path"] = new_path
+                    _final_path = new_path
+
+                # ----- 6b. Verschlüsselung wiederherstellen -----
+                reencrypt_pdf_with_password(
+                    _final_path,
+                    getattr(self, "password", None),
+                    lang=getattr(self, "lang", None),
+                )
 
                 result["moved_count"] = moved_count
                 result["success"] = True
@@ -15983,11 +17575,22 @@ class PageSizeThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(
+        self,
+        input_path,
+        output_path,
+        settings,
+        password=None,
+        lang=None,
+        suffix="",
+    ):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
+        self.password = password
+        self.lang = lang
+        self.suffix = suffix or "Page Size changed"
         self._is_cancelled = False
 
     def cancel(self):
@@ -15999,7 +17602,10 @@ class PageSizeThread(QThread):
 
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            doc = fitz.open(self.input_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.input_path,
+                password=self.password, lang=getattr(self, "lang", None))
+
             total_pages = len(doc)
 
             # Einstellungen
@@ -16087,6 +17693,16 @@ class PageSizeThread(QThread):
                     progress, f"Seite {page_num + 1} wird angepasst..."
                 )
 
+            # Metadaten: erst Original kopieren, dann persönliche ergänzen
+            # WICHTIG: apply_personal_metadata muss auf output_doc wirken,
+            # weil nur output_doc gespeichert wird.
+            copy_pdf_metadata(doc, output_doc)
+            apply_personal_metadata(
+                output_doc,
+                action_label=self.suffix,
+                password=self.password,
+            )
+
             # PDF speichern
             self.progress_updated.emit(90, "PDF wird gespeichert...")
             output_doc.save(self.output_path, garbage=4, deflate=True)
@@ -16100,6 +17716,13 @@ class PageSizeThread(QThread):
                     False, "Seitengröße ändern abgebrochen", self.output_path
                 )
                 return
+
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
 
             self.progress_updated.emit(100, "Seitengröße angepasst!")
             self.finished.emit(True, "", self.output_path)
@@ -16780,10 +18403,12 @@ class ExtractImagesThread(QThread):
         bool, str, str, int
     )  # success, message, folder_path, image_count
 
-    def __init__(self, pdf_path, settings):
+    def __init__(self, pdf_path, settings, lang=None, password=None):
         super().__init__()
         self.pdf_path = pdf_path
         self.settings = settings
+        self.lang = lang
+        self.password = password
         self._is_cancelled = False
 
     def cancel(self):
@@ -16798,7 +18423,9 @@ class ExtractImagesThread(QThread):
 
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            doc = fitz.open(self.pdf_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.pdf_path, password=self.password, lang=getattr(self, "lang", None))
+
             total_pages = len(doc)
 
             # Einstellungen
@@ -17360,12 +18987,14 @@ class NUpThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(self, input_path, output_path, settings, lang=None, password=None):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
 
     def cancel(self):
         self._is_cancelled = True
@@ -17376,7 +19005,10 @@ class NUpThread(QThread):
 
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            doc = fitz.open(self.input_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.input_path,
+                password=self.password, lang=getattr(self, "lang", None))
+
             total_pages = len(doc)
 
             # Einstellungen
@@ -17509,11 +19141,25 @@ class NUpThread(QThread):
                     progress, f"Seite {sheet_idx + 1}/{total_sheets} wird erstellt..."
                 )
 
+            ### METADATEN ======================
+            # A Original-Metadaten auf new_doc übertragen
+            copy_pdf_metadata(doc, output_doc)
+            # B Metadaten mit persönlichem Eintrag ergänzen(auf new_doc, NICHT auf doc)
+            apply_personal_metadata(
+                output_doc, action_label="N-up"
+            )
             # PDF speichern
             self.progress_updated.emit(90, "PDF wird gespeichert...")
             output_doc.save(self.output_path, garbage=4, deflate=True)
             output_doc.close()
             doc.close()
+
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
 
             if self._is_cancelled:
                 if os.path.exists(self.output_path):
@@ -17760,7 +19406,15 @@ class PdfAConvertDialog(QDialog):
             return
 
         try:
-            doc = fitz.open(self.parent.pdf_path)
+            # Passwort aus dem Hauptfenster holen (bei geschützten PDFs)
+            password = getattr(self.parent, "current_password", None)
+
+            doc = open_pdf_with_auth(
+                self.parent.pdf_path,
+                password=password,
+                lang=getattr(self.parent, "lang", None),
+            )
+
             has_text = False
             total_chars = 0
 
@@ -17827,38 +19481,40 @@ class PDFAThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(self, input_path, output_path, settings, lang=None, password=None):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
 
     def cancel(self):
         self._is_cancelled = True
 
     def run(self):
         try:
+            import fitz
             import ocrmypdf
 
             self.progress_updated.emit(10, "PDF/A-Konvertierung wird vorbereitet...")
 
             # Basis-Optionen für PDF/A ohne OCR
             options = {
-                "output_type": self.settings["standard"],  # z.B. "pdfa-2"
-                "force_ocr": False,  # KEIN OCR!
-                "skip_text": True,  # Text nicht überschreiben
+                "output_type": self.settings["standard"],
+                "force_ocr": False,
+                "skip_text": True,
                 "deskew": False,
                 "clean": False,
                 "remove_background": False,
                 "optimize": 1 if self.settings["compress"] else 0,
-                "metadata": None,  # Metadaten erhalten (None = original behalten)
             }
 
-            # Wenn Metadaten erhalten werden sollen, nicht explizit setzen
-            # ocrmypdf behält die Metadaten standardmäßig bei
-            if not self.settings["preserve_metadata"]:
-                options["metadata"] = False  # Metadaten entfernen
+            # Original-Metadaten behalten oder verwerfen
+            if not self.settings.get("preserve_metadata", True):
+                options["metadata"] = False
+            # sonst: metadata wird von ocrmypdf standardmäßig übernommen
 
             def progress_callback(progress, message):
                 if self._is_cancelled:
@@ -17866,9 +19522,14 @@ class PDFAThread(QThread):
                 mapped_progress = 10 + int(progress * 80)
                 self.progress_updated.emit(mapped_progress, message)
 
-            # Konvertierung ohne OCR
+            # Vorbereitung (entschlüsselte Kopie, falls nötig)
+            source, is_temp = prepare_decrypted_temp(
+                self.input_path, self.password
+            )
+
+            # Konvertierung – nutzt die entschlüsselte Kopie, nicht das Original
             ocrmypdf.ocr(
-                self.input_path,
+                source,
                 self.output_path,
                 **options,
                 progress_bar=progress_callback,
@@ -17880,6 +19541,32 @@ class PDFAThread(QThread):
                 self.finished.emit(False, "Konvertierung abgebrochen", self.output_path)
                 return
 
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
+
+            # ──── NACH der Konvertierung: persönlichen Metadaten-Eintrag ergänzen ────
+            self.progress_updated.emit(95, "Metadaten werden ergänzt...")
+            try:
+                # Öffnen und ggf authentifizieren
+                meta_doc = open_pdf_with_auth(self.output_path, password=self.password, lang=getattr(self, "lang", None))
+                # Metadaten ergänzen
+                apply_personal_metadata(meta_doc, action_label="PDF/A", password=self.password)
+
+                meta_tmp = self.output_path + ".meta.pdf"
+                meta_doc.save(meta_tmp, garbage=4, deflate=True)
+                meta_doc.close()
+                os.replace(meta_tmp, self.output_path)
+            except Exception as e:
+                # Nicht kritisch: Konvertierung war erfolgreich, nur Metadaten fehlen
+                print(f"WARN: Metadaten für PDF/A fehlgeschlagen: {e}")
+                if os.path.exists(self.output_path + ".meta.pdf"):
+                    try: os.remove(self.output_path + ".meta.pdf")
+                    except Exception: pass
+
             self.progress_updated.emit(100, "Konvertierung abgeschlossen!")
             self.finished.emit(True, "", self.output_path)
 
@@ -17889,15 +19576,27 @@ class PDFAThread(QThread):
                 error_msg = "Konvertierung abgebrochen"
             print(f"PDF/A-Fehler: {error_msg}")
             import traceback
-
             traceback.print_exc()
 
             if os.path.exists(self.output_path):
                 try:
                     os.remove(self.output_path)
-                except:
+                except Exception:
                     pass
             self.finished.emit(False, error_msg, self.output_path)
+
+        finally:
+            # Temporäre entschlüsselte Kopie aufräumen
+            try:
+                if "is_temp" in locals() and is_temp and "source" in locals():
+                    if source and os.path.exists(source):
+                        os.remove(source)
+                        tmp_dir = os.path.dirname(source)
+                        if os.path.isdir(tmp_dir) and not os.listdir(tmp_dir):
+                            os.rmdir(tmp_dir)
+                        print(f"DEBUG: Temp-Aufräumung abgeschlossen: {tmp_dir}")
+            except Exception as ce:
+                print(f"WARN: Temp-Aufräumung fehlgeschlagen: {ce}")
 
 
 ### ------------------------------------
@@ -18216,12 +19915,14 @@ class OptimizePDFThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str, int, int)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(self, input_path, output_path, settings, lang=None, password=None):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
 
     def cancel(self):
         self._is_cancelled = True
@@ -18230,56 +19931,74 @@ class OptimizePDFThread(QThread):
         try:
             import fitz
 
+            # Cancel-Flag zurücksetzen (Thread kann wiederverwendet werden)
+            self._is_cancelled = False
+
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            # Originalgröße
             original_size = os.path.getsize(self.input_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.input_path, password=self.password, lang=getattr(self, "lang", None))
 
-            # PDF öffnen
-            doc = fitz.open(self.input_path)
-
-            # Seitenbereich
+            # Seitenbereich (1-basiert → 0-basiert)
             start_page = self.settings["start_page"] - 1
             end_page = self.settings["end_page"] - 1
 
+            # Sicherheitsklemmen gegen doc.page_count
+            start_page = max(0, start_page)
+            end_page = min(doc.page_count - 1, end_page)
             total_pages = end_page - start_page + 1
+
             self.progress_updated.emit(20, f"Optimiere {total_pages} Seiten...")
 
             # Komprimierungsstufe
             level = self.settings["level"]
-
-            # Garbage Collection
             garbage = {1: 0, 2: 1, 3: 3, 4: 4}.get(level, 3)
             deflate = level >= 2
 
-            # Bildqualität basierend auf Stufe
-            quality_map = {1: 85, 2: 70, 3: 50, 4: 30}
-            image_quality = quality_map.get(level, 70)
+            # Bildqualität kommt jetzt aus dem Dialog-Slider
+            image_quality = self.settings.get("image_quality", 75)
 
-            # Wenn nur bestimmte Seiten optimiert werden sollen
+            # Metadaten-Optionen aus dem Dialog
+            preserve_metadata = self.settings.get("preserve_metadata", True)
+            suffix = self.settings.get("suffix", "Optimiert")
+
+            # --- Seitenbereich extrahieren (nur wenn nicht alle Seiten) ---
             if start_page > 0 or end_page < doc.page_count - 1:
                 self.progress_updated.emit(30, "Extrahiere Seitenbereich...")
                 new_doc = fitz.open()
-                for page_num in range(start_page, end_page + 1):
-                    if self._is_cancelled:
-                        doc.close()
-                        new_doc.close()
-                        self.finished.emit(
-                            False,
-                            "Optimierung abgebrochen",
-                            self.output_path,
-                            original_size,
-                            0,
+                try:
+                    for page_num in range(start_page, end_page + 1):
+                        if self._is_cancelled:
+                            new_doc.close()
+                            doc.close()
+                            self.finished.emit(
+                                False, "Optimierung abgebrochen",
+                                self.output_path, original_size, 0
+                            )
+                            return
+                        new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
+                        progress = 30 + int((page_num - start_page + 1) / total_pages * 20)
+                        self.progress_updated.emit(
+                            progress, f"Seite {page_num + 1} wird extrahiert..."
                         )
-                        return
-                    new_doc.insert_pdf(doc, from_page=page_num, to_page=page_num)
-                    progress = 30 + int((page_num - start_page + 1) / total_pages * 20)
-                    self.progress_updated.emit(
-                        progress, f"Seite {page_num + 1} wird extrahiert..."
-                    )
 
-                doc.close()
+                    # Metadaten übertragen
+                    if preserve_metadata:
+                        copy_pdf_metadata(doc, new_doc)
+                    apply_personal_metadata(new_doc, action_label=suffix, password=self.password)
+                finally:
+                    doc.close()
+
                 doc = new_doc
+            else:
+                # Komplettes PDF: Metadaten direkt auf doc anwenden
+                if not preserve_metadata:
+                    try:
+                        doc.set_metadata({})
+                    except Exception:
+                        pass
+                apply_personal_metadata(doc, action_label=suffix, password=self.password)
 
             # Bilder komprimieren (wenn aktiviert)
             if self.settings["compress_images"] and level >= 2:
@@ -18290,10 +20009,8 @@ class OptimizePDFThread(QThread):
             if self.settings["clean_objects"]:
                 self.progress_updated.emit(75, "Bereinige unbenutzte Objekte...")
 
-            # Speichern mit Optimierung
+            # Speichern
             self.progress_updated.emit(85, "Speichere optimierte PDF...")
-
-            # Zuerst in temporäre Datei speichern
             temp_path = self.output_path + ".temp"
             doc.save(
                 temp_path,
@@ -18302,11 +20019,11 @@ class OptimizePDFThread(QThread):
                 clean=self.settings["clean_objects"],
             )
             doc.close()
+            doc = None
 
-            # Prüfen ob die optimierte Version kleiner ist
+            # Größenvergleich
             optimized_size = os.path.getsize(temp_path)
 
-            # Wenn optimierte Version größer ist, Original verwenden
             if optimized_size > original_size and level > 1:
                 self.progress_updated.emit(
                     95, "Optimierung brachte keine Einsparung - verwende Original..."
@@ -18318,14 +20035,22 @@ class OptimizePDFThread(QThread):
             else:
                 if os.path.exists(self.output_path):
                     os.remove(self.output_path)
-                os.rename(temp_path, self.output_path)
+                shutil.move(temp_path, self.output_path)
                 new_size = optimized_size
+
+                # >>> Verschlüsselung wiederherstellen
+                reencrypt_pdf_with_password(
+                    self.output_path,
+                    getattr(self, "password", None),
+                    lang=getattr(self, "lang", None),
+                )
 
             if self._is_cancelled:
                 if os.path.exists(self.output_path):
                     os.remove(self.output_path)
                 self.finished.emit(
-                    False, "Optimierung abgebrochen", self.output_path, original_size, 0
+                    False, "Optimierung abgebrochen",
+                    self.output_path, original_size, 0
                 )
                 return
 
@@ -18338,14 +20063,16 @@ class OptimizePDFThread(QThread):
                 error_msg = "Optimierung abgebrochen"
             print(f"Optimierungsfehler: {error_msg}")
             import traceback
-
             traceback.print_exc()
 
-            if os.path.exists(self.output_path):
-                try:
-                    os.remove(self.output_path)
-                except:
-                    pass
+            # Cleanup: Temp UND Output entfernen
+            for path in (self.output_path + ".temp", self.output_path):
+                if os.path.exists(path):
+                    try:
+                        os.remove(path)
+                    except Exception:
+                        pass
+
             self.finished.emit(False, error_msg, self.output_path, 0, 0)
 
     def _compress_images(self, doc, quality):
@@ -19121,12 +20848,14 @@ class CropPDFThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(self, input_path, output_path, settings, lang=None, password=None):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
 
     def cancel(self):
         self._is_cancelled = True
@@ -19137,7 +20866,9 @@ class CropPDFThread(QThread):
 
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            doc = fitz.open(self.input_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.input_path, password=self.password, lang=getattr(self, "lang", None))
+
             total_pages = doc.page_count
 
             # Crop-Werte
@@ -19181,6 +20912,14 @@ class CropPDFThread(QThread):
                     progress, f"Seite {page_num + 1} wird zugeschnitten..."
                 )
 
+            ### METADATEN ======================
+            # A Original-Metadaten auf new_doc übertragen
+            # copy_pdf_metadata(doc, new_doc)
+            # # B Metadaten mit persönlichem Eintrag ergänzen(auf new_doc, NICHT auf doc)
+            apply_personal_metadata(
+                doc, action_label="Crop", password=self.password
+            )
+
             # PDF speichern
             self.progress_updated.emit(90, "PDF wird gespeichert...")
             doc.save(self.output_path, garbage=4, deflate=True)
@@ -19192,6 +20931,12 @@ class CropPDFThread(QThread):
                 self.finished.emit(False, "Zuschneiden abgebrochen", self.output_path)
                 return
 
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
             self.progress_updated.emit(100, "Zuschneiden abgeschlossen!")
             self.finished.emit(True, "", self.output_path)
 
@@ -19444,12 +21189,14 @@ class FlattenPDFThread(QThread):
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, input_path, output_path, settings):
+    def __init__(self, input_path, output_path, settings, lang=None, password=None):
         super().__init__()
         self.input_path = input_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
 
     def cancel(self):
         self._is_cancelled = True
@@ -19460,7 +21207,9 @@ class FlattenPDFThread(QThread):
 
             self.progress_updated.emit(10, "PDF wird geladen...")
 
-            doc = fitz.open(self.input_path)
+            # Öffnen und ggf authentifizieren
+            doc = open_pdf_with_auth(self.input_path, password=self.password, lang=getattr(self, "lang", None))
+
             total_pages = doc.page_count
 
             self.progress_updated.emit(20, f"Glätte {total_pages} Seiten...")
@@ -19512,6 +21261,11 @@ class FlattenPDFThread(QThread):
                     progress, f"Seite {page_num + 1} wird geglättet..."
                 )
 
+            ### METADATEN ======================
+            # B Metadaten mit persönlichem Eintrag ergänzen(auf new_doc, NICHT auf doc)
+            apply_personal_metadata(
+                doc, action_label="flatten", password=self.password
+            )
             # PDF speichern
             self.progress_updated.emit(90, "PDF wird gespeichert...")
             doc.save(self.output_path, garbage=4, deflate=True)
@@ -19522,6 +21276,13 @@ class FlattenPDFThread(QThread):
                     os.remove(self.output_path)
                 self.finished.emit(False, "Glätten abgebrochen", self.output_path)
                 return
+
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
 
             self.progress_updated.emit(100, "Glätten abgeschlossen!")
             self.finished.emit(True, "", self.output_path)
@@ -19566,8 +21327,9 @@ class OverlayDialog(QDialog):
         self.setMaximumSize(max_dialog_width, max_dialog_height)
         self.setSizeGripEnabled(True)
 
-        # Overlay-Datei
+        # Overlay-Datei + deren Passwort (falls verschlüsselt)
         self.overlay_path = None
+        self.overlay_password = None
 
         self.setup_ui()
 
@@ -19657,7 +21419,9 @@ class OverlayDialog(QDialog):
 
         explanation_text = QLabel(self.parent.tr("overlay_explanation_text"))
         explanation_text.setWordWrap(True)
-        explanation_text.setStyleSheet("color: #E0E0E0; font-size: 12px; padding: 5px;")
+        explanation_text.setStyleSheet(
+            "color: #E0E0E0; font-size: 12px; padding: 5px;"
+        )
         explanation_layout.addWidget(explanation_text)
 
         scroll_layout.addWidget(explanation_group)
@@ -19717,13 +21481,14 @@ class OverlayDialog(QDialog):
         stamp_options_layout.setContentsMargins(0, 10, 0, 0)
         stamp_options_layout.setSpacing(15)
 
-        # Position
         position_label = QLabel(self.parent.tr("overlay_position"))
         position_label.setStyleSheet("font-weight: bold;")
         stamp_options_layout.addWidget(position_label)
 
         self.position_combo = QComboBox()
-        self.position_combo.addItem(self.parent.tr("overlay_position_center"), "center")
+        self.position_combo.addItem(
+            self.parent.tr("overlay_position_center"), "center"
+        )
         self.position_combo.addItem(
             self.parent.tr("overlay_position_top_left"), "top-left"
         )
@@ -19738,7 +21503,6 @@ class OverlayDialog(QDialog):
         )
         stamp_options_layout.addWidget(self.position_combo)
 
-        # Größe
         size_label = QLabel(self.parent.tr("overlay_size"))
         size_label.setStyleSheet("font-weight: bold; margin-top: 5px;")
         stamp_options_layout.addWidget(size_label)
@@ -19766,7 +21530,6 @@ class OverlayDialog(QDialog):
 
         stamp_options_layout.addWidget(size_widget)
 
-        # Transparenz
         opacity_label = QLabel(self.parent.tr("overlay_opacity"))
         opacity_label.setStyleSheet("font-weight: bold; margin-top: 5px;")
         stamp_options_layout.addWidget(opacity_label)
@@ -19798,7 +21561,6 @@ class OverlayDialog(QDialog):
         )
         scroll_layout.addWidget(self.remove_bg_cb)
 
-        # Schwellwert für Hintergrundentfernung
         threshold_widget = QWidget()
         threshold_layout = QHBoxLayout(threshold_widget)
         threshold_layout.setContentsMargins(20, 0, 0, 0)
@@ -19924,7 +21686,6 @@ class OverlayDialog(QDialog):
 
         self.stamp_options_widget.setVisible(is_stamp)
 
-        # Typ-Information aktualisieren
         if is_fullpage:
             info_text = self.parent.tr("overlay_type_info_fullpage")
         elif is_transparent:
@@ -19933,7 +21694,6 @@ class OverlayDialog(QDialog):
             info_text = self.parent.tr("overlay_type_info_stamp")
         self.type_info_label.setText(info_text)
 
-        # Hintergrundentfernung nur bei Fullpage und Transparent anzeigen
         remove_bg_visible = is_fullpage or is_transparent
         self.remove_bg_label.setVisible(remove_bg_visible)
         self.remove_bg_cb.setVisible(remove_bg_visible)
@@ -19954,14 +21714,114 @@ class OverlayDialog(QDialog):
         """Aktualisiert das Transparenz-Label."""
         self.opacity_value_label.setText(f"{value}%")
 
+    def _is_encrypted(self, path):
+        """Prüft, ob eine PDF verschlüsselt ist. Bei Fehler: konservativ True."""
+        try:
+            import fitz
+
+            doc = fitz.open(path)
+            enc = bool(doc.is_encrypted or doc.needs_pass)
+            doc.close()
+            return enc
+        except Exception:
+            return True
+
     def browse_overlay_file(self):
-        """Öffnet Dialog zur Auswahl der Overlay-PDF."""
+        """Öffnet Dialog zur Auswahl der Overlay-PDF.
+        Wenn die gewählte PDF verschlüsselt ist, wird das Passwort abgefragt
+        (gespeicherte Passwörter werden zuerst probiert). Bei Misserfolg wird
+        die Datei abgelehnt und dieselbe Meldung wie beim Merge genutzt.
+        """
         path, _ = QFileDialog.getOpenFileName(
-            self, self.parent.tr("overlay_select_overlay"), "", "PDF Dateien (*.pdf)"
+            self,
+            self.parent.tr("overlay_select_overlay"),
+            "",
+            "PDF Dateien (*.pdf)",
         )
-        if path:
+        if not path:
+            return
+
+        # Prüfen, ob die Overlay-PDF verschlüsselt ist
+        if not self._is_encrypted(path):
             self.overlay_path = path
+            self.overlay_password = None
             self.file_edit.setText(path)
+            return
+
+        # Verschlüsselt: gespeichertes Passwort probieren
+        saved_pw = PDFPasswordManager.get_saved_password(path)
+        if saved_pw:
+            try:
+                import fitz
+
+                probe = fitz.open(path)
+                ok = probe.authenticate(saved_pw)
+                probe.close()
+                if ok:
+                    self.overlay_path = path
+                    self.overlay_password = saved_pw
+                    self.file_edit.setText(path)
+                    print(
+                        f"DEBUG: Overlay mit gespeichertem Passwort geöffnet: "
+                        f"{os.path.basename(path)}"
+                    )
+                    return
+            except Exception:
+                pass
+
+        # Passwort-Dialog anzeigen
+        pw_dialog = PasswordDialog(self, path, saved_pw)
+        if pw_dialog.exec_() != QDialog.Accepted:
+            self._show_overlay_encrypted_error(path)
+            return
+
+        action = getattr(pw_dialog, "action", None)
+        pw = getattr(pw_dialog, "password", None)
+
+        if action in ("open", "use_saved") and pw:
+            try:
+                import fitz
+
+                probe = fitz.open(path)
+                ok = probe.authenticate(pw)
+                probe.close()
+                if not ok:
+                    self._show_overlay_encrypted_error(path)
+                    return
+            except Exception:
+                self._show_overlay_encrypted_error(path)
+                return
+
+            if action == "open":
+                try:
+                    if pw_dialog.save_checkbox.isChecked():
+                        PDFPasswordManager.save_password(path, pw)
+                except Exception:
+                    pass
+
+            self.overlay_path = path
+            self.overlay_password = pw
+            self.file_edit.setText(path)
+            return
+
+        # Alle anderen Fälle → ablehnen
+        self._show_overlay_encrypted_error(path)
+
+    def _show_overlay_encrypted_error(self, path):
+        """Zeigt die Merge-Meldung für verschlüsselte Overlay-PDFs."""
+        myUniversalDialog(
+            self,
+            title=self.parent.tr("merge_encrypted_title"),
+            message=(
+                self.parent.tr("merge_encrypted_file", os.path.basename(path))
+                + "\n\n"
+                + self.parent.tr("merge_encrypted_hint")
+            ),
+            buttons=[(self.parent.tr("btn_ok"), "primary", "ok")],
+            icon_type="",
+            voice_message=self.parent.tr("merge_encrypted_not_allowed"),
+            text_alignment=Qt.AlignLeft,
+        ).exec_()
 
     def browse_folder(self):
         folder = QFileDialog.getExistingDirectory(
@@ -19995,6 +21855,7 @@ class OverlayDialog(QDialog):
 
         return {
             "overlay_path": self.overlay_path,
+            "overlay_password": self.overlay_password,
             "overlay_type": overlay_type,
             "start_page": start_page,
             "end_page": end_page,
@@ -20017,18 +21878,36 @@ class OverlayDialog(QDialog):
 
 
 class OverlayPDFThread(QThread):
-    """Thread für das Überlagern von PDFs."""
+    """Thread für das Überlagern von PDFs.
+
+    Basis-PDF und Overlay-PDF können unterschiedliche Passwörter haben.
+    - self.password        → Passwort der Basis-PDF (wird für Re-Verschlüsselung
+                             der Ergebnis-PDF verwendet)
+    - self.overlay_password → Passwort der Overlay-PDF (nur zum Lesen)
+    """
 
     progress_updated = pyqtSignal(int, str)
     finished = pyqtSignal(bool, str, str)
 
-    def __init__(self, base_path, overlay_path, output_path, settings):
+    def __init__(
+        self,
+        base_path,
+        overlay_path,
+        output_path,
+        settings,
+        lang=None,
+        password=None,
+        overlay_password=None,
+    ):
         super().__init__()
         self.base_path = base_path
         self.overlay_path = overlay_path
         self.output_path = output_path
         self.settings = settings
         self._is_cancelled = False
+        self.lang = lang
+        self.password = password
+        self.overlay_password = overlay_password
 
     def cancel(self):
         self._is_cancelled = True
@@ -20036,34 +21915,24 @@ class OverlayPDFThread(QThread):
     def remove_white_background(self, pil_image, threshold=200):
         """
         Entfernt weißen Hintergrund aus einem PIL-Bild.
-
-        Args:
-            pil_image: PIL.Image im RGBA-Modus
-            threshold: Schwellwert für Weiß (0-255)
-
-        Returns:
-            PIL.Image mit transparentem Hintergrund
         """
+        from PIL import Image
+
         if pil_image.mode != "RGBA":
             pil_image = pil_image.convert("RGBA")
 
-        # Daten als numpy-Array für schnelle Verarbeitung
         import numpy as np
 
         data = np.array(pil_image)
 
-        # RGB-Kanäle extrahieren
         r = data[:, :, 0]
         g = data[:, :, 1]
         b = data[:, :, 2]
 
-        # Weiße Pixel erkennen (alle Kanäle über Schwellwert)
         white_mask = (r >= threshold) & (g >= threshold) & (b >= threshold)
 
-        # Alpha-Kanal setzen: 0 für weiß, sonst 255
         alpha = np.where(white_mask, 0, 255).astype(np.uint8)
 
-        # Alpha in das Bild einfügen
         data[:, :, 3] = alpha
 
         return Image.fromarray(data, "RGBA")
@@ -20077,36 +21946,66 @@ class OverlayPDFThread(QThread):
         if overlay_page_count == 0:
             return None
 
-        # Wenn das Overlay genau eine Seite hat, verwende diese für alle Seiten
         if overlay_page_count == 1:
             return overlay_doc[0]
 
-        # Wenn das Overlay mehrere Seiten hat:
-        # - Für Seite 0: Seite 0
-        # - Für Seite 1: Seite 1
-        # - usw.
-        # - Wenn Seite größer als Seitenanzahl: erste Seite wiederholen
         if page_num < overlay_page_count:
             return overlay_doc[page_num]
         else:
-            # Wiederhole die erste Seite (oder eine bestimmte Logik)
-            # Hier: erste Seite für alle weiteren Seiten
             return overlay_doc[0]
+
+    def _open_with(self, path, password):
+        """Öffnet + authentifiziert. Fehlermeldung im Merge-Stil."""
+        import fitz
+
+        doc = fitz.open(path)
+        if doc.is_encrypted or doc.needs_pass:
+            if password:
+                if not doc.authenticate(password):
+                    doc.close()
+                    raise Exception(
+                        self.lang.tr(
+                            "merge_encrypted_file", os.path.basename(path)
+                        )
+                        if self.lang
+                        else f"Datei ist verschlüsselt: {os.path.basename(path)}"
+                    )
+            else:
+                doc.close()
+                raise Exception(
+                    self.lang.tr("merge_encrypted_file", os.path.basename(path))
+                    if self.lang
+                    else f"Datei ist verschlüsselt: {os.path.basename(path)}"
+                )
+        return doc
 
     def run(self):
         try:
             import fitz
             from PIL import Image
             import io
-            import numpy as np
 
             self.progress_updated.emit(10, "PDFs werden geladen...")
 
-            # Basis-PDF und Overlay-PDF öffnen
-            base_doc = fitz.open(self.base_path)
-            overlay_doc = fitz.open(self.overlay_path)
+            # Sicherheitsnetz: Quelle und Ziel dürfen nicht identisch sein
+            if os.path.abspath(self.base_path) == os.path.abspath(self.output_path):
+                self.finished.emit(
+                    False,
+                    "Ziel- und Quelldatei sind identisch – Speichern nicht möglich.",
+                    self.output_path,
+                )
+                return
 
-            # Prüfen ob Overlay-Datei Seiten hat
+            base_doc = self._open_with(self.base_path, self.password)
+
+            try:
+                overlay_doc = self._open_with(
+                    self.overlay_path, self.overlay_password
+                )
+            except Exception:
+                base_doc.close()
+                raise
+
             if len(overlay_doc) == 0:
                 base_doc.close()
                 overlay_doc.close()
@@ -20115,14 +22014,12 @@ class OverlayPDFThread(QThread):
                 )
                 return
 
-            # Seitenbereiche
             start_page = self.settings["start_page"] - 1
             end_page = self.settings["end_page"] - 1
             total_pages = end_page - start_page + 1
 
             self.progress_updated.emit(20, f"Verarbeite {total_pages} Seiten...")
 
-            # Einstellungen
             overlay_type = self.settings["overlay_type"]
             remove_background = self.settings.get("remove_background", False)
             threshold = self.settings.get("threshold", 200)
@@ -20145,14 +22042,12 @@ class OverlayPDFThread(QThread):
                 width_pt = base_rect.width
                 height_pt = base_rect.height
 
-                # Overlay-Seite bestimmen
                 overlay_page = self.get_overlay_page(overlay_doc, page_num)
                 if overlay_page is None:
                     continue
 
                 overlay_rect = overlay_page.rect
 
-                # Overlay als Pixmap rendern
                 if overlay_type == "stamp":
                     if size_mode == "fit":
                         zoom_x = width_pt / overlay_rect.width
@@ -20160,29 +22055,22 @@ class OverlayPDFThread(QThread):
                         zoom = min(zoom_x, zoom_y) * size_percent
                     elif size_mode == "custom":
                         zoom = size_percent
-                    else:  # original
+                    else:
                         zoom = 1.0 * size_percent
-                else:  # fullpage oder transparent
-                    # Bei Vollseite wird das Overlay auf Seitengröße skaliert
+                else:
                     zoom_x = width_pt / overlay_rect.width
                     zoom_y = height_pt / overlay_rect.height
                     if overlay_type == "fullpage":
-                        # Bei "Ganze Seite" wird das Overlay gestreckt
                         zoom = max(zoom_x, zoom_y)
-                    else:  # transparent
-                        # Bei "transparent" wird das Overlay angepasst
+                    else:
                         zoom = min(zoom_x, zoom_y)
 
                 mat = fitz.Matrix(zoom, zoom)
                 pix = overlay_page.get_pixmap(matrix=mat)
 
-                # PIL-Bild aus Pixmap erstellen
                 img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
-
-                # In RGBA konvertieren für Transparenz
                 img = img.convert("RGBA")
 
-                # Weißen Hintergrund entfernen (nur bei transparent oder wenn aktiviert)
                 if overlay_type == "transparent" or (
                     overlay_type == "fullpage" and remove_background
                 ):
@@ -20195,13 +22083,11 @@ class OverlayPDFThread(QThread):
                     )
                     img = self.remove_white_background(img, threshold)
 
-                # Transparenz anwenden (nur bei Stamp)
                 if overlay_type == "stamp" and opacity < 1.0:
                     r, g, b, a = img.split()
                     a = a.point(lambda p: int(p * opacity))
                     img = Image.merge("RGBA", (r, g, b, a))
 
-                # Position berechnen
                 if overlay_type == "stamp":
                     if position == "center":
                         x = (width_pt - pix.width) / 2
@@ -20222,16 +22108,13 @@ class OverlayPDFThread(QThread):
                         x = (width_pt - pix.width) / 2
                         y = (height_pt - pix.height) / 2
                 else:
-                    # Bei Vollseite: immer bei 0,0 beginnen
                     x = 0
                     y = 0
 
-                # PIL-Bild in PNG-Bytes umwandeln (mit Transparenz)
                 img_byte_arr = io.BytesIO()
                 img.save(img_byte_arr, format="PNG")
                 img_byte_arr.seek(0)
 
-                # Overlay auf Basis-Seite einfügen
                 base_page.insert_image(
                     fitz.Rect(x, y, x + pix.width, y + pix.height),
                     stream=img_byte_arr,
@@ -20244,8 +22127,14 @@ class OverlayPDFThread(QThread):
                     progress, f"Seite {page_num + 1} wird überlagert..."
                 )
 
-            # PDF speichern
             self.progress_updated.emit(90, "PDF wird gespeichert...")
+
+            apply_personal_metadata(
+                base_doc,
+                action_label="Overlay",
+                password=self.password,
+            )
+
             base_doc.save(self.output_path, garbage=4, deflate=True)
             base_doc.close()
             overlay_doc.close()
@@ -20255,6 +22144,12 @@ class OverlayPDFThread(QThread):
                     os.remove(self.output_path)
                 self.finished.emit(False, "Überlagerung abgebrochen", self.output_path)
                 return
+
+            reencrypt_pdf_with_password(
+                self.output_path,
+                getattr(self, "password", None),
+                lang=getattr(self, "lang", None),
+            )
 
             self.progress_updated.emit(100, "Überlagerung abgeschlossen!")
             self.finished.emit(True, "", self.output_path)
@@ -20271,89 +22166,9 @@ class OverlayPDFThread(QThread):
             if os.path.exists(self.output_path):
                 try:
                     os.remove(self.output_path)
-                except:
+                except Exception:
                     pass
             self.finished.emit(False, error_msg, self.output_path)
-
-
-### ------------------------------------
-### Drag & Drop Seiten im Übersichtsmodus verschieben
-### ------------------------------------
-
-
-class DraggablePageItem(QGraphicsPixmapItem):
-    """Seiten-Item das verschoben werden kann (nur im Übersichtsmodus)"""
-
-    def __init__(self, pixmap, page_num):
-        super().__init__(pixmap)
-        self.page_num = page_num  # page_num speichern
-        self.original_pos = None
-        self.is_dragging = False
-
-        self.setAcceptHoverEvents(True)
-        self.setFlag(QGraphicsItem.ItemIsMovable, True)
-        self.setFlag(QGraphicsItem.ItemSendsGeometryChanges, True)
-
-        # Optische Verbesserung
-        self.setCursor(Qt.OpenHandCursor)
-
-    def mousePressEvent(self, event):
-        """Maus-Druck-Event für Drag & Drop"""
-        if self.drag_enabled and event.button() == Qt.LeftButton:
-            # Position in Scene-Koordinaten umwandeln
-            scene_pos = self.graphics_view.mapToScene(event.pos())
-
-            # Prüfen ob eine Seite angeklickt wurde
-            for i, item in enumerate(self.page_items):
-                if item.contains(scene_pos - item.pos()):
-                    self.start_drag_page(i)
-                    event.accept()
-                    return
-
-        super().mousePressEvent(event)
-
-    def mouseMoveEvent(self, event):
-        """Maus-Bewegungs-Event für Drag & Drop"""
-        if self.drag_enabled and hasattr(self, "dragged_page_item"):
-            # Seite bewegen
-            scene_pos = self.graphics_view.mapToScene(event.pos())
-            self.dragged_page_item.setPos(
-                scene_pos
-                - QPointF(
-                    self.dragged_page_item.boundingRect().width() / 2,
-                    self.dragged_page_item.boundingRect().height() / 2,
-                )
-            )
-            event.accept()
-        else:
-            super().mouseMoveEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        """Maus-Loslass-Event für Drag & Drop"""
-        if (
-            self.drag_enabled
-            and event.button() == Qt.LeftButton
-            and hasattr(self, "dragged_page_item")
-        ):
-            # Position in Scene-Koordinaten umwandeln
-            scene_pos = self.graphics_view.mapToScene(event.pos())
-
-            # Seite ablegen
-            self.drop_page_at(scene_pos)
-            event.accept()
-        else:
-            super().mouseReleaseEvent(event)
-
-    def hoverEnterEvent(self, event):
-        if not self.is_dragging:
-            self.setOpacity(0.9)
-            self.setCursor(Qt.OpenHandCursor)
-        super().hoverEnterEvent(event)
-
-    def hoverLeaveEvent(self, event):
-        if not self.is_dragging:
-            self.setOpacity(1.0)
-        super().hoverLeaveEvent(event)
 
 
 ###==============================================
@@ -27577,10 +29392,26 @@ class FullPageWatermarkRenderer:
             data: Die Daten aus dem entsprechenden Dialog
         """
         try:
-            # PDF öffnen
+            _pw = getattr(parent, "current_password", None)
+
+            # PDF öffnen + authentifizieren
             doc = fitz.open(pdf_path)
-            if hasattr(parent, "current_password") and parent.current_password:
-                doc.authenticate(parent.current_password)
+            if doc.is_encrypted or doc.needs_pass:
+                if _pw:
+                    if not doc.authenticate(_pw):
+                        doc.close()
+                        raise Exception(
+                            parent.tr("password_wrong")
+                            if hasattr(parent, "tr")
+                            else "Falsches Passwort"
+                        )
+                else:
+                    doc.close()
+                    raise Exception(
+                        parent.tr("pdf_encrypted")
+                        if hasattr(parent, "tr")
+                        else "PDF ist verschlüsselt"
+                    )
 
             total_pages = len(doc)
 
@@ -27612,37 +29443,78 @@ class FullPageWatermarkRenderer:
 
                 # Wasserzeichen in die PDF-Seite einfügen (über die gesamte Seite)
                 page.insert_image(
-                    page_rect, stream=img_byte_arr, keep_proportion=False, overlay=True
+                    page_rect,
+                    stream=img_byte_arr,
+                    keep_proportion=False,
+                    overlay=True,
                 )
 
-            # PDF speichern
+            # ========== SPEICHERN ==========
+            # Metadaten mit persönlichem Eintrag ergänzen (modulweite Funktion!)
+            apply_personal_metadata(
+                doc,
+                action_label=parent.tr("filename_with_watermark"),
+                password=_pw,
+            )
+
+            # Zielpfad
             output_path = parent.generate_custom_filename(
                 suffixes=[parent.tr("filename_with_watermark")]
             )
             final_path = parent._prepare_overwrite_target(output_path)
 
+            # Kollisionsschutz: Zieldatei darf nicht identisch mit der Quelle sein
+            _src_abs = os.path.abspath(pdf_path)
+            _out_abs = os.path.abspath(final_path)
+            if _out_abs == _src_abs or os.path.exists(final_path):
+                base, ext = os.path.splitext(final_path)
+                counter = 1
+                while True:
+                    candidate = f"{base}_{counter}{ext}"
+                    if (
+                        os.path.abspath(candidate) != _src_abs
+                        and not os.path.exists(candidate)
+                    ):
+                        final_path = candidate
+                        break
+                    counter += 1
+                print(
+                    f"DEBUG: Wasserzeichen-Kollision, neuer Zielpfad: "
+                    f"{os.path.basename(final_path)}"
+                )
+
             temp_dir = tempfile.gettempdir()
-            temp_name = f"temp_fullpage_watermark_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.pdf"
+            temp_name = (
+                f"temp_fullpage_watermark_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}.pdf"
+            )
             temp_path = os.path.join(temp_dir, temp_name)
 
-            if hasattr(parent, "current_password") and parent.current_password:
+            if _pw:
                 doc.save(
                     temp_path,
                     encryption=fitz.PDF_ENCRYPT_AES_256,
-                    user_pw=parent.current_password,
+                    user_pw=_pw,
+                    owner_pw=_pw,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
                     garbage=4,
                     deflate=True,
                 )
             else:
                 doc.save(temp_path, garbage=4, deflate=True)
             doc.close()
+
             shutil.move(temp_path, final_path)
 
-            # >>> OPTION: Quelldatei löschen, wenn aktiviert
-            self._finalize_save_delete_source(final_path)
+            # Quelldatei löschen (Option)
+            parent._finalize_save_delete_source(final_path)
 
-            if hasattr(parent, "current_password") and parent.current_password:
-                PDFPasswordManager.save_password(final_path, parent.current_password)
+            # Passwort für die neue Datei speichern
+            if _pw:
+                try:
+                    PDFPasswordManager.save_password(final_path, _pw)
+                except Exception as pwe:
+                    print(f"WARN: Passwort speichern fehlgeschlagen: {pwe}")
 
             # Erfolgsmeldung
             parent._success_title = parent.tr("success")
@@ -27650,18 +29522,14 @@ class FullPageWatermarkRenderer:
             parent._success_voice_message = parent.tr("watermark_applied")
             parent._show_success_dialog = True
 
-            # Neuladen mit Verzögerung
+            # Neuladen
             QTimer.singleShot(
                 500,
                 lambda: parent._reload_pdf_after_save_with_position(
                     final_path,
                     parent.current_page,
                     QPointF(0, 0),
-                    (
-                        parent.current_password
-                        if hasattr(parent, "current_password")
-                        else None
-                    ),
+                    _pw,
                 ),
             )
 
@@ -27671,7 +29539,9 @@ class FullPageWatermarkRenderer:
 
             traceback.print_exc()
             QMessageBox.critical(
-                parent, parent.tr("error"), f"{parent.tr('save_error')}:\n{str(e)}"
+                parent,
+                parent.tr("error"),
+                f"{parent.tr('save_error')}:\n{str(e)}",
             )
 
     @staticmethod
@@ -28581,17 +30451,56 @@ class PDFTextViewer(QDialog):
         try:
             import fitz
 
+            # Passwort aus dem Hauptfenster holen (falls vorhanden)
+            _pw = None
+            if self.parent is not None:
+                _pw = getattr(self.parent, "current_password", None)
+
+            # Fallback: gespeichertes Passwort probieren
+            if not _pw:
+                try:
+                    _pw = PDFPasswordManager.get_saved_password(pdf_path)
+                except Exception:
+                    _pw = None
+
             doc = fitz.open(pdf_path)
+
+            # Authentifizierung bei verschlüsselten PDFs
+            if doc.is_encrypted or doc.needs_pass:
+                ok = False
+                if _pw:
+                    ok = doc.authenticate(_pw)
+                if not ok:
+                    # Kein oder falsches Passwort → Passwort-Dialog
+                    pw_dialog = PasswordDialog(self, pdf_path, _pw)
+                    pw_dialog.setWindowModality(Qt.ApplicationModal)
+                    pw_dialog.raise_()
+                    pw_dialog.activateWindow()
+                    if pw_dialog.exec_() == QDialog.Accepted:
+                        pw = getattr(pw_dialog, "password", None)
+                        if pw and doc.authenticate(pw):
+                            ok = True
+                            try:
+                                if pw_dialog.save_checkbox.isChecked():
+                                    PDFPasswordManager.save_password(pdf_path, pw)
+                            except Exception:
+                                pass
+                    if not ok:
+                        doc.close()
+                        print("PDFTextViewer: Passwort nicht eingegeben oder falsch")
+                        return False
+
             self.total_pages = len(doc)
             self.page_texts = []
 
             self.page_spin.setMaximum(self.total_pages)
-            self.page_count_label.setText(self.lang.tr("page_count", self.total_pages))
+            self.page_count_label.setText(
+                self.lang.tr("page_count", self.total_pages)
+            )
 
             full_text = ""
             for page_num in range(self.total_pages):
                 page = doc.load_page(page_num)
-                # Einfache Textextraktion – funktioniert für alle Sprachen
                 page_text = page.get_text("text")
 
                 self.page_texts.append(
@@ -28688,27 +30597,33 @@ class PDFTextViewer(QDialog):
             #     self.say(self.lang.tr('search_placeholder'))
 
     def say(self, message, force=False, convert_numbers=False):
-        """Erweiterte Sprachausgabe mit optionaler Zahlenkonvertierung"""
-        if not force and not self.voice_enabled:
+        """Sprachausgabe mit sprachrichtiger Stimme (ohne pkill)."""
+        if not force and not getattr(self, "voice_enabled", True):
+            return
+        if not message:
             return
 
         try:
-            # Zahlen in Wörter konvertieren wenn gewünscht
-            if convert_numbers and hasattr(self, "lang"):
-                import re
+            if convert_numbers:
+                lang_obj = getattr(self, "lang", None)
+                if lang_obj is not None:
+                    import re as _re
 
-                def replace_number(match):
-                    num = int(match.group())
-                    return NumberToWords.convert(num, self.lang.current_lang)
+                    def replace_number(match):
+                        num = int(match.group())
+                        return NumberToWords.convert(num, lang_obj.current_lang)
 
-                message = re.sub(r"\b\d+\b", replace_number, message)
+                    message = _re.sub(r"\b\d+\b", replace_number, message)
 
-            if sys.platform == "darwin":
-                os.system("pkill -f say")
-                speed = getattr(self, "voice_speed", 1.0)
-                os.system(f'say -r {int(175 * speed)} "{message}" &')
-            else:
-                os.system(f'say "{message}" &')
+            lang_code = _detect_lang_code(self)
+            rate = int(175 * getattr(self, "voice_speed", 1.0))
+
+            _speak_message(
+                message,
+                lang_code=lang_code,
+                rate=rate,
+                engine_holder=self,
+            )
         except Exception as e:
             print(f"Fehler bei Sprachausgabe: {str(e)}")
 
@@ -29657,9 +31572,14 @@ class Language:
             settings = QSettings("BinhDiez", "PDFDarkView")
             settings.setValue("language", lang_code)
             settings.sync()
+            # Voice-Cache leeren, damit die nächste Ansage die Stimme
+            # der neuen Sprache wählt.
+            try:
+                _clear_voice_cache()
+            except Exception as e:
+                print(f"[Language] Voice-Cache-Reset: {e}")
             return True
         return False
-
     def get_language(self):
         return self.current_lang
 
@@ -38133,6 +40053,353 @@ def get_predefined_ocr_options():
     # (Wird später im Mehrfachauswahl-Dialog verwendet)
     return options, available, names
 
+# ============================================================
+# Modulweite Hilfsfunktionen: Öffnen und ggf. Authentifizieren
+# (nutzbar aus PDFViewer, Dialogen UND aus QThread-Workern)
+# ============================================================
+
+def open_pdf_with_auth(path, password=None, lang=None):
+    """
+    Öffnet eine PDF und authentifiziert sie, wenn nötig.
+    Modulweite Funktion für alle Klassen (Viewer, Dialoge, Worker).
+    """
+    doc = fitz.open(path)
+    if not (doc.is_encrypted or doc.needs_pass):
+        return doc
+
+    if not password:
+        doc.close()
+        msg = lang.tr("pdf_encrypted") if lang else "PDF ist verschlüsselt"
+        raise Exception(msg)
+
+    if not doc.authenticate(password):
+        doc.close()
+        msg = lang.tr("password_wrong") if lang else "Falsches Passwort"
+        raise Exception(msg)
+
+    return doc
+
+def prepare_decrypted_temp(input_path, password, lang=None):
+    """
+    Erstellt eine temporäre entschlüsselte Kopie der PDF, falls sie verschlüsselt ist.
+    Gibt (pfad_zur_quelle, is_temp) zurück.
+    """
+    try:
+        probe = fitz.open(input_path)
+        if not (probe.is_encrypted or probe.needs_pass):
+            probe.close()
+            return input_path, False
+        if not password:
+            probe.close()
+            msg = lang.tr("pdf_encrypted") if lang else "PDF verschlüsselt, kein Passwort"
+            raise Exception(msg)
+        if not probe.authenticate(password):
+            probe.close()
+            msg = lang.tr("password_wrong") if lang else "Falsches Passwort"
+            raise Exception(msg)
+        probe.close()
+
+        tmp_dir = tempfile.mkdtemp(prefix="ocr_decrypt_")
+        tmp_path = os.path.join(tmp_dir, os.path.basename(input_path))
+        src = fitz.open(input_path)
+        if not src.authenticate(password):
+            src.close()
+            msg = lang.tr("password_wrong") if lang else "Falsches Passwort"
+            raise Exception(msg)
+        src.save(tmp_path, encryption=fitz.PDF_ENCRYPT_NONE,
+                 garbage=4, deflate=True)
+        src.close()
+        return tmp_path, True
+    except Exception as e:
+        print(f"WARN: prepare_decrypted_temp: {e}")
+        raise
+
+def reencrypt_pdf_with_password(path, password, lang=None):
+    """
+    Stellt die AES-256-Verschlüsselung einer PDF wieder her.
+
+    Wird nach jedem Speichervorgang aufgerufen, wenn eine Quelldatei
+    ursprünglich verschlüsselt war. Die Zieldatei wird dabei in-place
+    neu geschrieben.
+
+    Sicherheitsaspekte:
+    - Schreibt in eine Temp-Datei und ersetzt dann die Originaldatei
+      atomar (os.replace) → kein Datenverlust bei Absturz.
+    - Kein Effekt, wenn `password` leer/None ist.
+    - Kein Effekt, wenn die Datei bereits verschlüsselt ist.
+
+    Gibt True zurück, wenn verschlüsselt wurde, sonst False.
+    """
+    if not password:
+        return False
+    if not path or not os.path.exists(path):
+        return False
+
+    try:
+        doc = fitz.open(path)
+
+        # Wenn bereits verschlüsselt → nichts zu tun
+        if doc.is_encrypted or doc.needs_pass:
+            doc.close()
+            print(f"DEBUG: {os.path.basename(path)} ist bereits verschlüsselt")
+            return False
+
+        # In-place-Verschlüsselung über Temp-Datei
+        tmp_out = path + ".enc.pdf"
+        doc.save(
+            tmp_out,
+            encryption=fitz.PDF_ENCRYPT_AES_256,
+            user_pw=password,
+            owner_pw=password,
+            permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+            garbage=4,
+            deflate=True,
+        )
+        doc.close()
+        os.replace(tmp_out, path)
+        print(f"DEBUG: Re-Verschlüsselung erfolgreich: {os.path.basename(path)}")
+        return True
+
+    except Exception as e:
+        # Temp-Datei aufräumen, falls sie hängen geblieben ist
+        try:
+            if os.path.exists(path + ".enc.pdf"):
+                os.remove(path + ".enc.pdf")
+        except Exception:
+            pass
+
+        msg = (
+            lang.tr("pdf_reencrypt_failed", str(e))
+            if lang
+            else f"Re-Verschlüsselung fehlgeschlagen: {e}"
+        )
+        print(f"WARN: {msg}")
+        return False
+
+# ============================================================
+# Modulweite Hilfsfunktionen: PDF-Metadaten
+# (nutzbar aus PDFViewer, Dialogen UND aus QThread-Workern)
+# ============================================================
+
+def copy_pdf_metadata(src_doc, dst_doc):
+    """
+    Kopiert die Info-Dict-Metadaten von src_doc nach dst_doc.
+    Wird gebraucht, wenn dst_doc via fitz.open() + insert_pdf() erzeugt wurde
+    (insert_pdf kopiert KEINE Metadaten).
+
+    Read-only Felder (format, encryption) werden entfernt, sonst meckert
+    set_metadata bei manchen PyMuPDF-Versionen.
+    """
+    try:
+        meta = src_doc.metadata
+        if meta:
+            dst_doc.set_metadata(
+                {
+                    k: v
+                    for k, v in meta.items()
+                    if k not in ("format", "encryption")
+                }
+            )
+    except Exception as e:
+        print(f"WARN: Metadaten kopieren fehlgeschlagen: {e}")
+
+
+def apply_personal_metadata(
+    doc,
+    action_label="",
+    username=None,
+    app_name="PDFDarkView",
+    password=None,
+):
+    """
+    Ergänzt die Info-Dict-Metadaten eines fitz-Dokuments um persönliche
+    Einträge (Benutzer, Zeitstempel, Aktion). Original-Metadaten bleiben
+    erhalten.
+
+    Authentifiziert das Dokument bei Bedarf selbst, damit set_metadata
+    auch bei verschlüsselten PDFs wirkt.
+
+    Parameter:
+      doc          : geöffnetes fitz.Document (in-memory)
+      action_label : z. B. 'mit_Unterschrift' oder '_ocr'
+      username     : Benutzername. Wenn None, wird aus QSettings/System gelesen
+      app_name     : Wert für den Producer-Hinweis
+      password     : Passwort für verschlüsselte PDFs.
+                     Wenn None, wird aus QSettings/self gelesen.
+    """
+    try:
+        from datetime import datetime as _dt
+        import getpass
+
+        # ---------------------------------------------------------
+        # 1. Auth sicherstellen (nur wenn nötig)
+        # ---------------------------------------------------------
+        try:
+            if doc.is_encrypted or doc.needs_pass:
+                pw = password
+                if pw is None:
+                    # QSettings als Fallback (funktioniert auch im Worker-Thread)
+                    try:
+                        s = QSettings("BinhDiez", "PDFDarkView")
+                        pw = s.value("current_password", "", type=str) or None
+                    except Exception:
+                        pw = None
+
+                if pw:
+                    if not doc.authenticate(pw):
+                        raise Exception("Falsches Passwort für Metadaten-Update")
+                else:
+                    raise Exception(
+                        "PDF ist verschlüsselt, aber kein Passwort übergeben"
+                    )
+        except AttributeError:
+            # doc ist kein fitz.Document (z. B. schon geschlossen)
+            raise
+
+        # ---------------------------------------------------------
+        # 2. Benutzer ermitteln
+        # ---------------------------------------------------------
+        if username is None:
+            try:
+                settings = QSettings("BinhDiez", "PDFDarkView")
+                username = settings.value(
+                    "filename/username", "", type=str
+                ).strip()
+            except Exception:
+                username = ""
+            if not username:
+                try:
+                    username = getpass.getuser()
+                except Exception:
+                    username = ""
+
+        # ---------------------------------------------------------
+        # 3. Bestehende Metadaten auslesen
+        # ---------------------------------------------------------
+        meta = dict(doc.metadata or {})
+
+        # ---------------------------------------------------------
+        # 4. author ergänzen (dedupliziert, kommasepariert)
+        # ---------------------------------------------------------
+        existing_author = (meta.get("author") or "").strip()
+        author_parts = [
+            a.strip() for a in existing_author.split(",") if a.strip()
+        ]
+        if username and username not in author_parts:
+            author_parts.append(username)
+        if author_parts:
+            meta["author"] = ", ".join(author_parts)
+
+        # ---------------------------------------------------------
+        # 5. subject ergänzen (mit Zeitstempel, als Historie)
+        # ---------------------------------------------------------
+        timestamp = _dt.now().strftime("%Y-%m-%d %H:%M:%S")
+        entry = (
+            f"{action_label} ({timestamp})"
+            if action_label
+            else f"Bearbeitet ({timestamp})"
+        )
+        existing_subject = (meta.get("subject") or "").strip()
+        meta["subject"] = (
+            f"{existing_subject} | {entry}" if existing_subject else entry
+        )
+
+        # Sicherheitsnetz: subject kappen, falls er unendlich wächst
+        MAX_SUBJECT_LEN = 4000
+        if len(meta["subject"]) > MAX_SUBJECT_LEN:
+            parts = meta["subject"].split(" | ")
+            if len(parts) > 6:
+                meta["subject"] = " | ".join(
+                    parts[:1] + ["…"] + parts[-5:]
+                )
+
+        # ---------------------------------------------------------
+        # 6. keywords ergänzen (dedupliziert)
+        # ---------------------------------------------------------
+        existing_keywords = (meta.get("keywords") or "").strip()
+        kw_parts = [
+            k.strip() for k in existing_keywords.split(",") if k.strip()
+        ]
+        if username and username not in kw_parts:
+            kw_parts.append(username)
+        if kw_parts:
+            meta["keywords"] = ", ".join(kw_parts)
+
+        # ---------------------------------------------------------
+        # 7. producer ergänzen
+        # ---------------------------------------------------------
+        existing_producer = (meta.get("producer") or "").strip()
+        if app_name not in existing_producer:
+            meta["producer"] = (
+                f"{existing_producer}; {app_name}"
+                if existing_producer
+                else app_name
+            )
+
+        # ---------------------------------------------------------
+        # 8. modDate aktualisieren (PDF-Datumsformat)
+        # ---------------------------------------------------------
+        meta["modDate"] = _dt.now().strftime("D:%Y%m%d%H%M%S")
+
+        # ---------------------------------------------------------
+        # 9. Info-Dict zurückschreiben
+        # ---------------------------------------------------------
+        meta_clean = {
+            k: v
+            for k, v in meta.items()
+            if k not in ("format", "encryption")
+        }
+        doc.set_metadata(meta_clean)
+
+        # ---------------------------------------------------------
+        # 10. Optional: XMP mit aktualisieren (nur wenn vorhanden)
+        # ---------------------------------------------------------
+        try:
+            import re as _re
+
+            xmp = doc.get_xml_metadata()
+            if xmp:
+                xmp_new = xmp
+
+                if meta_clean.get("author"):
+                    xmp_new = _re.sub(
+                        r"(<dc:creator>).*?(</dc:creator>)",
+                        r"\1<rdf:Seq><rdf:li>"
+                        + meta_clean["author"]
+                        + r"</rdf:li></rdf:Seq>\2",
+                        xmp_new,
+                        flags=_re.DOTALL,
+                    )
+
+                if meta_clean.get("subject"):
+                    xmp_new = _re.sub(
+                        r"(<dc:description>).*?(</dc:description>)",
+                        r'\1<rdf:Alt><rdf:li xml:lang="x-default">'
+                        + meta_clean["subject"]
+                        + r"</rdf:li></rdf:Alt>\2",
+                        xmp_new,
+                        flags=_re.DOTALL,
+                    )
+
+                if meta_clean.get("keywords"):
+                    xmp_new = _re.sub(
+                        r"(<pdf:Keywords>).*?(</pdf:Keywords>)",
+                        r"\1" + meta_clean["keywords"] + r"\2",
+                        xmp_new,
+                        flags=_re.DOTALL,
+                    )
+
+                doc.set_xml_metadata(xmp_new)
+        except Exception as xe:
+            print(f"WARN: XMP-Update fehlgeschlagen: {xe}")
+
+        print(
+            f"DEBUG: Metadaten ergänzt: author='{meta_clean.get('author')}', "
+            f"subject='{meta_clean.get('subject')}'"
+        )
+
+    except Exception as e:
+        print(f"WARN: Metadaten konnten nicht ergänzt werden: {e}")
 
 ###===============================================
 ### eigenen Dialoge als Ersatz für QMessageBox und QInputDialog
@@ -38190,8 +40457,6 @@ def get_predefined_ocr_options():
     · primary (Blau), success (Grün), danger (Rot), warning (Orange), dark (Dunkelgrau)
 """
 
-
-# Original
 class myUniversalDialog(QDialog):
     """Eigene MessageBox mit Logo, App-Icon, gestylten Buttons und Sprachausgabe
     Automatische Zahlenkonvertierung in der Sprachausgabe!
@@ -38498,7 +40763,10 @@ class myUniversalDialog(QDialog):
                 self.msg_edit = QTextEdit()
 
                 if "<a " in message:
-                    fixed_message = self._fix_html_links(message)
+                    # \n → <br> nur bei HTML-Pfad, weil setPlainText
+                    # Zeilenumbrüche selbst korrekt rendert.
+                    fixed_message = self._normalize_message_for_richtext(message)
+                    fixed_message = self._fix_html_links(fixed_message)
                     self.msg_edit.setHtml(fixed_message)
                 else:
                     self.msg_edit.setPlainText(message)
@@ -38521,11 +40789,9 @@ class myUniversalDialog(QDialog):
                 """)
 
                 msg_container_layout.addWidget(self.msg_edit)
-            else:
-                if "<a " in message:
-                    fixed_message = self._fix_html_links(message)
-                else:
-                    fixed_message = message
+                fixed_message = self._normalize_message_for_richtext(message)
+                if "<a " in fixed_message:
+                    fixed_message = self._fix_html_links(fixed_message)
 
                 self.msg_label = QLabel(fixed_message)
                 self.msg_label.setWordWrap(True)
@@ -38572,10 +40838,9 @@ class myUniversalDialog(QDialog):
 
             msg_layout.addWidget(msg_container_widget)
         else:
-            if "<a " in message:
-                fixed_message = self._fix_html_links(message)
-            else:
-                fixed_message = message
+            fixed_message = self._normalize_message_for_richtext(message)
+            if "<a " in fixed_message:
+                fixed_message = self._fix_html_links(fixed_message)
 
             self.msg_label = QLabel(fixed_message)
             self.msg_label.setWordWrap(True)
@@ -38615,43 +40880,87 @@ class myUniversalDialog(QDialog):
         scroll_area.setWidget(msg_container)
         main_layout.addWidget(scroll_area)
 
-        # ===== BUTTONS (MIT DYNAMISCHER BREITE UND GRÖSSERER HÖHE) =====
+        # ===== BUTTONS (MIT DYNAMISCHER BREITE UND AUTOMATISCHEM WRAP) =====
         button_widget = QWidget()
-        button_layout = QHBoxLayout(button_widget)
-        button_layout.setSpacing(15)
-        button_layout.setContentsMargins(10, 10, 10, 10)  # Mehr Platz für Buttons
-
         self.default_button_widget = None
         self.button_widgets = []
 
         button_defs = buttons if buttons is not None else self.buttons
 
-        # 🔥 ERSTE: Maximale Button-Breite berechnen für gleichmäßige Verteilung
-        max_button_width = 0
+        # 1. Verfuegbare Bildschirmbreite ermitteln
+        screen = QApplication.primaryScreen()
+        if screen:
+            _available_width = screen.availableGeometry().width()
+        else:
+            _available_width = 1024
+        _max_content_width = max(400, _available_width - 100)
+
+        # 2. Benoetigte Button-Breiten berechnen (OHNE Kappung)
+        button_sizes = []
         for button_def in button_defs:
             if len(button_def) >= 3:
                 text = button_def[0]
-                # Temporären Button für Text-Messung
-                temp_btn = QPushButton(text)
-                font = temp_btn.font()
-                metrics = QFontMetrics(font)
-                text_width = metrics.horizontalAdvance(text)
-                padding = 50  # Mehr Padding für größere Buttons
-                width = text_width + padding
-                max_button_width = max(max_button_width, width)
+            else:
+                continue
+            metrics = QFontMetrics(self.font())
+            text_width = metrics.horizontalAdvance(text)
+            needed = text_width + 80
+            needed = max(needed, 140)
+            button_sizes.append(needed)
 
-        # Begrenze maximale Breite auf 400px (nicht zu breit)
-        max_button_width = min(max_button_width, 400)
-        # Mindestbreite 100px
-        max_button_width = max(max_button_width, 100)
+        if not button_sizes:
+            button_sizes = [140]
 
+        # 3. Layout-Modus entscheiden: horizontal oder vertikal
+        _spacing = 14
+        _margins = 20
+        _n = len(button_sizes)
+
+        _total_horizontal = (
+            sum(button_sizes)
+            + (_n - 1) * _spacing
+            + _margins * 2
+            + 20
+        )
+
+        if _total_horizontal <= _max_content_width:
+            use_vertical = False
+            uniform_width = max(button_sizes)
+        else:
+            use_vertical = True
+            uniform_width = max(button_sizes)
+            uniform_width = min(
+                uniform_width,
+                _max_content_width - _margins * 2 - 20,
+            )
+            uniform_width = max(uniform_width, 200)
+
+        _diag = (
+            "[myUniversalDialog] use_vertical="
+            + str(use_vertical)
+            + ", uniform_width="
+            + str(uniform_width)
+            + ", max_content="
+            + str(_max_content_width)
+        )
+        print(_diag)
+
+        # 4. Layout anlegen
+        if use_vertical:
+            button_layout = QVBoxLayout(button_widget)
+        else:
+            button_layout = QHBoxLayout(button_widget)
+        button_layout.setSpacing(_spacing)
+        button_layout.setContentsMargins(_margins, 10, _margins, 10)
+
+        # 5. Buttons erzeugen
         for i, button_def in enumerate(button_defs):
             if len(button_def) == 3:
                 text, style_type, action = button_def
             elif len(button_def) == 4:
-                text, style_type, action, min_width = button_def
+                text, style_type, action, _min_width = button_def
             else:
-                print(f"FEHLER: Ungültige Button-Definition: {button_def}")
+                print("FEHLER: Ungueltige Button-Definition: " + str(button_def))
                 continue
 
             btn = QPushButton(text)
@@ -38662,23 +40971,57 @@ class myUniversalDialog(QDialog):
                 i == 0 and not self.default_button
             )
 
-            # 🔥 GRÖSSERE BUTTONS: Höhe 40px (statt 35)
-            self.style_button(btn, style_type, (max_button_width, 40), is_default)
+            self.style_button(
+                btn, style_type, (uniform_width, 40), is_default
+            )
 
-            btn.clicked.connect(lambda checked, r=action: self.handle_button(r))
+            # setFixedWidth aus style_button ueberschreiben:
+            # Minimum setzen, Maximum aufheben.
+            btn.setMaximumWidth(16777215)
+            btn.setMinimumWidth(uniform_width)
+            btn.setMinimumHeight(40)
+            btn.setMaximumHeight(40)
 
+            metrics = QFontMetrics(self.font())
+            if metrics.horizontalAdvance(text) + 80 > uniform_width:
+                btn.setToolTip(text)
+
+            btn.clicked.connect(
+                lambda checked, r=action: self.handle_button(r)
+            )
             btn.setFocusPolicy(Qt.StrongFocus)
-            button_layout.addWidget(btn)
+
+            if use_vertical:
+                button_layout.addWidget(btn, 0, Qt.AlignHCenter)
+            else:
+                button_layout.addWidget(btn)
 
             if is_default:
                 self.default_button_widget = btn
 
-        button_layout.setAlignment(Qt.AlignCenter)
+        if not use_vertical:
+            button_layout.setAlignment(Qt.AlignCenter)
+
         main_layout.addWidget(button_widget)
         self.setLayout(main_layout)
 
-        # 🔥 DIALOG GRÖSSE ANPASSEN: Nach dem Layout die minimale Breite setzen
+        # 6. Dialog-Breite an Buttons anpassen
+        if use_vertical:
+            _needed_dialog_width = uniform_width + _margins * 2 + 40
+        else:
+            _needed_dialog_width = (
+                sum(button_sizes)
+                + (_n - 1) * _spacing
+                + _margins * 2
+                + 40
+            )
+
+        _needed_dialog_width = min(_needed_dialog_width, _max_content_width)
+        if _needed_dialog_width > self.minimumWidth():
+            self.setMinimumWidth(_needed_dialog_width)
+
         self.adjustSize()
+
 
     def init_button_style(self):
         """Button-Styles initialisieren - NUR FARBEN, KEINE FESTEN BREITEN!"""
@@ -39065,6 +41408,38 @@ class myUniversalDialog(QDialog):
 
         return re.sub(r"\b\d+\b", replace_number, text)
 
+    def _normalize_message_for_richtext(self, message):
+        """
+        Wandelt \\n in <br> um, damit RichText-Nachrichten korrekte
+        Zeilenumbrüche anzeigen.
+
+        Wichtig: Wenn die Nachricht bereits Block-HTML enthält
+        (<br>, <p>, <div>, <ul>, …), wird NICHTS verändert – der Autor
+        hat sich dort schon um Zeilenumbrüche gekümmert.
+
+        Damit bleiben bestehende HTML-Wörterbucheinträge unberührt.
+        """
+        if not message:
+            return message
+
+        # Wenn die Nachricht bereits Block-HTML enthält, vertrauen wir dem Autor.
+        _block_markers = (
+            "<br",
+            "<p>", "<p ",
+            "<div",
+            "<ul", "<ol", "<li",
+            "<pre",
+            "<table", "<tr", "<td",
+            "<h1", "<h2", "<h3", "<h4", "<h5", "<h6",
+        )
+        lower = message.lower()
+        for marker in _block_markers:
+            if marker in lower:
+                return message
+
+        # Sonst: Zeilenumbrüche in <br> wandeln
+        return message.replace("\n", "<br>")
+
     def _fix_html_links(self, html_text):
         """
         Korrigiert automatisch ALLE HTML-Links im Text.
@@ -39394,7 +41769,6 @@ class myUniversalDialog(QDialog):
         super().reject()
         self.closed.emit()
 
-
 ###==============================================
 ### HAUPTFENSTER
 ###==============================================
@@ -39419,6 +41793,9 @@ class PDFViewer(QMainWindow):
         # Methoden dynamisch hinzufügen
         self.tr = tr.__get__(self)
         # >>> ENDE Language <<<
+
+        # Persistente Liste der Action-Suffixe aus der aktuellen Sprache aktualisieren
+        self._refresh_persisted_action_suffixes()
 
         # Erstelle BaseWindow als Mitglied
         self.base_window = BaseWindow()
@@ -39460,6 +41837,9 @@ class PDFViewer(QMainWindow):
         self.voice_enabled = settings.value("voice_enabled", True, type=bool)
         self.voice_speed = settings.value("voice_speed", 1.0, type=float)
 
+        # Referenz auf den aktuell laufenden say-Prozess
+        self._say_process = None
+
         # Für passwortgeschützte, direkt geöffnete PDFs
         self.current_doc = None
         self.current_password = None  # Falls gesetzt
@@ -39483,6 +41863,10 @@ class PDFViewer(QMainWindow):
         self.current_drag_item = None
         self.drag_original_pos = None
         self.last_page_move_info = None  # Speichert (alte_seite, neue_position)
+
+        # folgende zwei Zeilen auf jedem Gerät nur einmalig ausführen
+        self.settings = QSettings("BinhDiez", "PDFDarkView")
+        self._migrate_protected_marker_setting()
 
         # Backup-Einstellungen
         self.settings = QSettings("BinhDiez", "PDFDarkView")
@@ -39849,24 +42233,52 @@ class PDFViewer(QMainWindow):
         """Initialisiert die Menüleiste mit Übersetzungen"""
         menubar = self.menuBar()
 
-        # Stylesheet für einheitliche Shortcut-Ausrichtung
-        menubar.setStyleSheet("""
-            QMenu {
-                font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-                font-size: 13px;
-                background-color: #3D3D3D;
-                color: #E0E0E0;
-                border: 1px solid #555555;
-                min-width: 450px;
-            }
-            QMenu::item {
-                padding-right: 50px;
-            }
-            QMenu::item:selected {
-                background-color: #1565C0;
-                color: white;
-            }
-        """)
+        if sys.platform == "darwin":
+            # macOS: bestehende Optik beibehalten
+            menubar.setStyleSheet("""
+                QMenu {
+                    font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+                    font-size: 13px;
+                    background-color: #3D3D3D;
+                    color: #E0E0E0;
+                    border: 1px solid #555555;
+                    min-width: 450px;
+                }
+                QMenu::item {
+                    padding-right: 50px;
+                }
+                QMenu::item:selected {
+                    background-color: #1565C0;
+                    color: white;
+                }
+            """)
+        else:
+            # Windows / Linux: kompakte Menues, die sich am Inhalt orientieren.
+            # KEIN min-width, sonst werden auch kleine Untermenues sehr breit
+            # und schieben die Untermenues an den rechten Rand.
+            menubar.setStyleSheet("""
+                QMenu {
+                    font-family: "Segoe UI", "Arial", sans-serif;
+                    font-size: 12px;
+                    background-color: #3D3D3D;
+                    color: #E0E0E0;
+                    border: 1px solid #555555;
+                    padding: 4px 0px;
+                }
+                QMenu::item {
+                    padding: 6px 30px 6px 20px;
+                    min-width: 90px;
+                }
+                QMenu::item:selected {
+                    background-color: #1565C0;
+                    color: white;
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: #555555;
+                    margin: 4px 8px;
+                }
+            """)
 
         # ==========================================
         # Datei-Menü - Dokumentenverwaltung
@@ -41716,6 +44128,12 @@ class PDFViewer(QMainWindow):
         if old_lang == language_code:
             return
 
+        # Nach dem Sprachwechsel: neue Suffixe persistieren,
+        # damit der Parser sie beim nächsten Speichern kennt.
+        try:
+            self._refresh_persisted_action_suffixes()
+        except Exception as e:
+            print(f"[Language] Warnung beim Persistieren der Suffixe: {e}")
         if not self.lang.set_language(language_code):
             print(f"DEBUG: Sprache {language_code} nicht verfügbar")
             return
@@ -41850,39 +44268,42 @@ class PDFViewer(QMainWindow):
     ### BACKUPS
     ###---------------------------------------
 
-    def toggle_backup_setting(self):
-        """Schaltet die Backup-Einstellung um und zeigt einmalig einen Info-Dialog."""
-        # Aktuellen Zustand vor dem Umschalten merken
-        old_state = self.create_backup
+    def toggle_backup_setting(self, checked=None):
+        """
+        Schaltet die Backup-Einstellung um.
+        Wird von QAction.triggered(bool) aufgerufen, daher kann 'checked'
+        den neuen Zustand direkt liefern. Damit bleibt der Haken im Menue
+        synchron zum tatsaechlichen Zustand.
+        """
+        # Wenn das Signal den neuen checked-Status liefert, nutzen wir diesen.
+        # Sonst togglen wir den aktuellen Zustand (z. B. bei programmatischem Aufruf).
+        if checked is not None:
+            self.create_backup = bool(checked)
+        else:
+            self.create_backup = not self.create_backup
 
-        # Umschalten
-        self.create_backup = not self.create_backup
-        self.settings.setValue("create_backup", self.create_backup)
-        self.settings.sync()
+        # Einstellung persistieren
+        settings = QSettings("BinhDiez", "PDFDarkView")
+        settings.setValue("create_backup", self.create_backup)
+        settings.sync()
 
-        # Menü-Haken aktualisieren
-        if hasattr(self, "backup_action"):
+        # Menue-Action synchronisieren (falls vorhanden)
+        if hasattr(self, "backup_action") and self.backup_action is not None:
             self.backup_action.setChecked(self.create_backup)
 
-        # Einstellung speichern
-        self.save_app_settings()
-
         # Statusleiste aktualisieren
-        status = self.tr("backup_on") if self.create_backup else self.tr("backup_off")
-        self.statusBar().showMessage(self.tr("backup_status", status), 3000)
-
-        status_msg = (
-            self.tr("backup_activated")
-            if self.create_backup
-            else self.tr("backup_deactivated")
+        self.statusBar().showMessage(
+            f"Backup: {'✔' if self.create_backup else '✘'}"
         )
-        self.say(status_msg)
 
-        print(f"Backup-Einstellung geändert: {self.create_backup}")
-
-        # Nur wenn der Zustand sich tatsächlich geändert hat, und noch nicht dauerhaft ausgeblendet
-        if old_state != self.create_backup:
-            self._show_backup_info_dialog()
+        # Optionale Ansage (nutzt vorhandene Keys)
+        try:
+            if self.create_backup:
+                self.say(self.tr("backup_activated"))
+            else:
+                self.say(self.tr("backup_deactivated"))
+        except Exception:
+            pass
 
     def on_backup_setting_changed(self):
         """Wird vom FilenameSettingsDialog aufgerufen, wenn sich die Backup-Einstellung geändert hat."""
@@ -42023,35 +44444,35 @@ class PDFViewer(QMainWindow):
         self.save_app_settings()
 
     def say(self, message, force=False, convert_numbers=False):
-        """Erweiterte Sprachausgabe mit optionaler Zahlenkonvertierung"""
+        """Zentrale Sprachausgabe – sprachrichtig, ohne pkill."""
         if getattr(self, "_is_closing", False):
             return
         if not force and not self.voice_enabled:
             return
+        if not message:
+            return
 
         try:
             if convert_numbers and hasattr(self, "lang"):
-                import re
+                import re as _re
 
                 def replace_number(match):
                     num = int(match.group())
                     return NumberToWords.convert(num, self.lang.current_lang)
 
-                message = re.sub(r"\b\d+\b", replace_number, message)
+                message = _re.sub(r"\b\d+\b", replace_number, message)
 
-            if platform.system() == "Darwin":
-                # macOS: originaler say-Befehl
-                os.system("pkill -f say")
-                speed = getattr(self, "voice_speed", 1.0)
-                os.system(f'say -r {int(175 * speed)} "{message}" &')
-            else:
-                # Windows/Linux: pyttsx3 (bereits installiert)
-                import pyttsx3
+            speed = getattr(self, "voice_speed", 1.0)
+            rate = int(175 * speed)
 
-                engine = pyttsx3.init()
-                engine.setProperty("rate", int(175 * getattr(self, "voice_speed", 1.0)))
-                engine.say(message)
-                engine.runAndWait()
+            lang_code = getattr(self.lang, "current_lang", None) or "de"
+
+            _speak_message(
+                message,
+                lang_code=lang_code,
+                rate=rate,
+                engine_holder=self,
+            )
         except Exception as e:
             print(f"Fehler bei Sprachausgabe: {str(e)}")
 
@@ -43756,6 +46177,35 @@ class PDFViewer(QMainWindow):
             )
             return False
 
+    def _open_pdf(self, path, password=None):
+        """
+        Öffnet eine PDF und authentifiziert sie, wenn nötig.
+        Nutzt standardmäßig self.current_password.
+
+        Raises:
+            Exception mit übersetzter Meldung, wenn:
+              - PDF verschlüsselt ist, aber kein Passwort vorliegt
+              - Passwort falsch ist
+        """
+        doc = fitz.open(path)
+
+        if not (doc.is_encrypted or doc.needs_pass):
+            return doc
+
+        pw = password
+        if pw is None:
+            pw = getattr(self, "current_password", None)
+
+        if not pw:
+            doc.close()
+            raise Exception(self.tr("pdf_encrypted"))
+
+        if not doc.authenticate(pw):
+            doc.close()
+            raise Exception(self.tr("password_wrong"))
+
+        return doc
+
     def _create_temp_decrypted_copy(self, pdf_path, password):
         """Erstellt temporäre entschlüsselte Kopie"""
         try:
@@ -43824,73 +46274,140 @@ class PDFViewer(QMainWindow):
             return False
 
     def _remove_password_and_open(self, pdf_path, password):
-        """Entfernt Passwort und speichert unverschlüsselte Kopie"""
+        """
+        Entfernt den Passwortschutz und speichert eine ungeschützte Kopie
+        neben dem Original. Es wird KEIN Save-As-Dialog mehr angezeigt.
+        """
         try:
-            # Backup erstellen wenn aktiviert
-            if self.create_backup:
-                backup_path = self.get_backup_filename(pdf_path)
-                shutil.copy2(pdf_path, backup_path)
-                print(f"Backup der verschlüsselten Datei erstellt: {backup_path}")
-
-            # Speicherort für unverschlüsselte Kopie abfragen
-            # Original: default_path = os.path.splitext(pdf_path)[0] + "_unencrypted.pdf"
-            default_path = (
-                os.path.splitext(pdf_path)[0] + "_unencrypted.pdf"
-            )  # bewusst englisch
-            path, _ = QFileDialog.getSaveFileName(
-                self,
-                # "Unverschlüsselte PDF speichern unter"
-                self.tr("save_unencrypted"),
-                default_path,
-                "PDF Dateien (*.pdf)",
-            )
-
-            if not path:
+            _pw = password or getattr(self, "current_password", None)
+            if not _pw:
+                QMessageBox.critical(
+                    self, self.tr("error"), self.tr("password_wrong")
+                )
                 return False
 
-            # Öffne das verschlüsselte PDF
-            doc = fitz.open(pdf_path)
+            # 1. Backup erstellen (wenn aktiviert)
+            if self.create_backup:
+                try:
+                    backup_path = self.get_backup_filename(pdf_path)
+                    shutil.copy2(pdf_path, backup_path)
+                    print(f"Backup der verschlüsselten Datei erstellt: {backup_path}")
+                except Exception as be:
+                    print(f"WARN: Backup fehlgeschlagen: {be}")
 
-            # Prüfe ob Passwort benötigt wird
-            if doc.needs_pass:
-                if not doc.authenticate(password):
-                    # "Falsches Passwort."
+            # 2. Dokument öffnen + authentifizieren
+            doc = fitz.open(pdf_path)
+            if doc.is_encrypted or doc.needs_pass:
+                if not doc.authenticate(_pw):
+                    doc.close()
                     QMessageBox.critical(
                         self, self.tr("error"), self.tr("password_wrong")
                     )
-                    doc.close()
                     return False
 
-            # Unverschlüsselt speichern
-            doc.save(path, encryption=fitz.PDF_ENCRYPT_NONE, garbage=4, deflate=True)
+            # 3. Zielpfad bestimmen – ohne Dialog
+            #    - geschützt-Marker entfernen
+            #    - unencrypted-Suffix anhängen
+            #    - vorhandenes unencrypted NICHT doppelt anhängen
+            # Kein "unencrypted"-Suffix mehr – Marker wird einfach entfernt.
+            target_path = FilenameGenerator.generate(
+                pdf_path=pdf_path,
+                suffixes=None,
+                is_protected=False,
+                update_timestamp=False,
+                strip_protection_marker=True,
+                strip_suffixes=[
+                    "unencrypted",
+                    "unverschlüsselt",
+                ],
+            )
+
+            # Kollisionsschutz
+            counter = 1
+            base_t, ext_t = os.path.splitext(target_path)
+            while os.path.exists(target_path):
+                target_path = f"{base_t}_{counter}{ext_t}"
+                counter += 1
+
+            print(f"DEBUG: Unprotect-Zielpfad: {target_path}")
+
+            # 4. Metadaten ergänzen (Passwort, weil doc authentifiziert ist)
+            try:
+                apply_personal_metadata(
+                    doc,
+                    action_label="decrypted",
+                    password=_pw,
+                )
+            except Exception as me:
+                print(f"WARN: Metadaten-Ergänzung fehlgeschlagen: {me}")
+
+            # 5. Unverschlüsselt speichern
+            #    WICHTIG: KEIN garbage=4, das war die Ursache für leere Dateien
+            #    bei manchen verschlüsselten Ausgangsdokumenten.
+            doc.save(
+                target_path,
+                encryption=fitz.PDF_ENCRYPT_NONE,
+                deflate=True,
+            )
             doc.close()
 
-            # Gespeichertes Passwort löschen
-            PDFPasswordManager.delete_password(pdf_path)
+            # 6. Verifikation: Datei nicht leer und hat Seiten
+            if not os.path.exists(target_path) or os.path.getsize(target_path) == 0:
+                raise Exception(
+                    "Entschlüsseln fehlgeschlagen: Ausgabedatei ist leer"
+                )
+            try:
+                _test = fitz.open(target_path)
+                _pages = len(_test)
+                _test.close()
+                if _pages == 0:
+                    raise Exception(
+                        "Entschlüsseln fehlgeschlagen: 0 Seiten in Ausgabedatei"
+                    )
+            except Exception as ve:
+                try:
+                    os.remove(target_path)
+                except Exception:
+                    pass
+                raise Exception(f"Verifikation fehlgeschlagen: {ve}")
 
-            # Unverschlüsselte Kopie laden
-            self.pdf_path = path
-            self.setWindowTitle(f"{self.tr('app_title')} - {os.path.basename(path)}")
+            # 7. Passwort für das Original aus der DB entfernen
+            try:
+                PDFPasswordManager.delete_password(pdf_path)
+            except Exception as pe:
+                print(f"WARN: Passwort aus DB entfernen fehlgeschlagen: {pe}")
 
-            dialog = myUniversalDialog(
-                self,
-                # "Erfolgreich entschlüsselt"
-                title=self.tr("decryption_success"),
-                # "PDF wurde entschlüsselt und gespeichert unter:\n\n{0}"
-                message=self.tr("decryption_success_message", path),
-                # Keine buttons = Default "OK" Button
-                icon_type="",
-                # "PDF wurde entschlüsselt und gespeichert."
-                voice_message=self.tr("decryption_success_voice"),
-                text_alignment=Qt.AlignLeft,
-            )
-            dialog.exec_()
-            return self._load_pdf_direct(path)
+            # 8. Erfolgsmeldung
+            try:
+                dialog = myUniversalDialog(
+                    self,
+                    title=self.tr("decryption_success"),
+                    message=self.tr(
+                        "decryption_success_message",
+                        os.path.basename(target_path),
+                    ),
+                    icon_type="",
+                    voice_message=self.tr("decryption_success_voice"),
+                    text_alignment=Qt.AlignLeft,
+                )
+                dialog.exec_()
+            except Exception as de:
+                print(f"WARN: Erfolgsmeldung fehlgeschlagen: {de}")
+
+            # 9. Neue ungeschützte Datei laden
+            self.pdf_path = target_path
+            self.current_password = None
+            return self.load_pdf(target_path)
 
         except Exception as e:
-            # "Fehler beim Entfernen des Passworts: {0}"
+            print(f"FEHLER beim Entfernen des Passworts: {e}")
+            import traceback
+
+            traceback.print_exc()
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('password_remove_error')}: {str(e)}"
+                self,
+                self.tr("error"),
+                f"{self.tr('password_remove_error')}: {str(e)}",
             )
             return False
 
@@ -44141,6 +46658,39 @@ class PDFViewer(QMainWindow):
     ### PDF Info für Statusliste Navbar und Dialog
     ### ----------------------
 
+    @contextmanager
+    def _with_current_pdf(self):
+        """
+        Stellt das aktuelle PDF authentifiziert bereit.
+        Nutzt self.current_doc, wenn vorhanden (bereits authentifiziert).
+        Sonst wird frisch geöffnet und danach geschlossen.
+
+        Verwendung:
+            with self._with_current_pdf() as doc:
+                page = doc[0]
+        """
+        import fitz
+
+        # Fall 1: current_doc ist bereits offen und authentifiziert
+        current = getattr(self, "current_doc", None)
+        if current is not None and not current.is_closed:
+            yield current
+            return
+
+        # Fall 2: frisch öffnen
+        if not self.pdf_path or not os.path.exists(self.pdf_path):
+            raise FileNotFoundError(f"PDF nicht gefunden: {self.pdf_path}")
+
+        doc = fitz.open(self.pdf_path)
+        try:
+            if doc.is_encrypted or doc.needs_pass:
+                pw = getattr(self, "current_password", None)
+                if not pw or not doc.authenticate(pw):
+                    raise PermissionError("Passwort fehlt oder ungültig")
+            yield doc
+        finally:
+            doc.close()
+
     def update_page_info(self):
         """Aktualisiert die Statusleiste mit Seiteninformationen (anhängend)."""
         if (
@@ -44155,39 +46705,35 @@ class PDFViewer(QMainWindow):
             current = self.current_page + 1
             total = len(self.page_items)
 
-            # Seitengröße aus dem Dokument holen
-            doc = fitz.open(self.pdf_path)
-            if self.current_page < len(doc):
-                page = doc[self.current_page]
-                width_pt = page.rect.width
-                height_pt = page.rect.height
+            # Seitengröße aus dem Dokument holen (authentifiziert)
+            with self._with_current_pdf() as doc:
+                if self.current_page < len(doc):
+                    page = doc[self.current_page]
+                    width_pt = page.rect.width
+                    height_pt = page.rect.height
 
-                # In mm umrechnen (1 pt = 0.352778 mm)
-                width_mm = width_pt * 0.352778
-                height_mm = height_pt * 0.352778
+                    # In mm umrechnen (1 pt = 0.352778 mm)
+                    width_mm = width_pt * 0.352778
+                    height_mm = height_pt * 0.352778
 
-                # Format erkennen
-                format_name = self._get_page_format(width_pt, height_pt)
+                    # Format erkennen
+                    format_name = self._get_page_format(width_pt, height_pt)
 
-                # Seiteninfo-String
-                page_info = f" | {format_name} ({width_mm:.1f} x {height_mm:.1f} mm)"
+                    # Seiteninfo-String
+                    page_info = f" | {format_name} ({width_mm:.1f} x {height_mm:.1f} mm)"
 
-                # Bestehenden Statusleisten-Text holen (ohne unsere Info)
-                current_text = self.statusBar().currentMessage()
+                    # Bestehenden Statusleisten-Text holen (ohne unsere Info)
+                    current_text = self.statusBar().currentMessage()
 
-                # Wenn bereits eine Seiteninfo vorhanden ist, diese entfernen
-                # Suche nach " | " am Ende
-                if " | " in current_text:
-                    # Prüfen ob es unsere Seiteninfo ist (enthält "mm")
-                    parts = current_text.rsplit(" | ", 1)
-                    if len(parts) == 2 and "mm" in parts[1]:
-                        current_text = parts[0]
+                    # Wenn bereits eine Seiteninfo vorhanden ist, diese entfernen
+                    if " | " in current_text:
+                        parts = current_text.rsplit(" | ", 1)
+                        if len(parts) == 2 and "mm" in parts[1]:
+                            current_text = parts[0]
 
-                # Neue Statusleisten-Nachricht
-                new_text = f"{current_text}{page_info}"
-                self.statusBar().showMessage(new_text)
-
-            doc.close()
+                    # Neue Statusleisten-Nachricht
+                    new_text = f"{current_text}{page_info}"
+                    self.statusBar().showMessage(new_text)
         except Exception as e:
             print(f"Fehler beim Aktualisieren der Seiteninfo: {e}")
 
@@ -44198,46 +46744,41 @@ class PDFViewer(QMainWindow):
             return
 
         try:
-            import fitz
+            with self._with_current_pdf() as doc:
+                # Basis-Info als sauberer Block
+                info_lines = [
+                    f"Datei: {os.path.basename(self.pdf_path)}",
+                    f"Seiten: {len(doc)}",
+                    f"Dateigröße: {self._format_size(os.path.getsize(self.pdf_path))}",
+                    "",
+                    "Seitengrößen:",
+                    "-" * 40,
+                ]
 
-            doc = fitz.open(self.pdf_path)
+                # Seitengrößen sammeln
+                page_sizes = {}
+                for i, page in enumerate(doc):
+                    width = page.rect.width
+                    height = page.rect.height
+                    key = f"{width:.0f}x{height:.0f}"
+                    if key not in page_sizes:
+                        format_name = self._get_page_format(width, height)
+                        page_sizes[key] = {
+                            "count": 0,
+                            "format": format_name,
+                            "width": width,
+                            "height": height,
+                        }
+                    page_sizes[key]["count"] += 1
 
-            # Basis-Info als sauberer Block (ohne doppelte \n)
-            info_lines = [
-                f"Datei: {os.path.basename(self.pdf_path)}",
-                f"Seiten: {len(doc)}",
-                f"Dateigröße: {self._format_size(os.path.getsize(self.pdf_path))}",
-                "",
-                "Seitengrößen:",
-                "-" * 40,
-            ]
+                # Größen-Infos anhängen
+                for key, data in page_sizes.items():
+                    info_lines.append(
+                        f"  {data['format']} ({data['width']:.0f} x {data['height']:.0f} pt)"
+                        f" - {data['count']} Seite(n)"
+                    )
 
-            # Seitengrößen sammeln (wie gehabt)
-            page_sizes = {}
-            for i, page in enumerate(doc):
-                width = page.rect.width
-                height = page.rect.height
-                key = f"{width:.0f}x{height:.0f}"
-                if key not in page_sizes:
-                    format_name = self._get_page_format(width, height)
-                    page_sizes[key] = {
-                        "count": 0,
-                        "format": format_name,
-                        "width": width,
-                        "height": height,
-                    }
-                page_sizes[key]["count"] += 1
-
-            # Größen-Infos anhängen (mit Einrückung)
-            for key, data in page_sizes.items():
-                info_lines.append(
-                    f"  {data['format']} ({data['width']:.0f} x {data['height']:.0f} pt)"
-                    f" - {data['count']} Seite(n)"
-                )
-
-            doc.close()
-
-            # Alles mit genau EINEM \n verbinden
+            # doc ist hier bereits geschlossen
             info_text = "\n".join(info_lines)
 
             myUniversalDialog(
@@ -44533,9 +47074,15 @@ class PDFViewer(QMainWindow):
         pw_dialog = ProtectPDFDialog(self, self.pdf_path)
         if pw_dialog.exec_() == QDialog.Accepted and pw_dialog.password:
             try:
-                # Dateiname
+                # Dateiname – unencrypted-Marker entfernen, geschützt hinzufügen
                 output_path = self.generate_custom_filename(
-                    is_protected=True, force_new_file=True
+                    is_protected=True,
+                    force_new_file=True,
+                    strip_suffixes=[
+                        "unencrypted",
+                        "unverschlüsselt",
+                        _PROTECTED_MARKER_CLEAN,
+                    ] + _PROTECTED_MARKER_ALIASES,
                 )
 
                 # Falls die Datei bereits existiert, Nummer anhängen (einfache Lösung)
@@ -44588,12 +47135,16 @@ class PDFViewer(QMainWindow):
                     doc.close()
                     raise Exception(self.tr("password_wrong"))
 
+            ### METADATEN ======================
+            # B Metadaten mit persönlichem Eintrag ergänzen(
+            apply_personal_metadata(doc, action_label=self.tr("protect_title"))
+
             # Verschlüsselt speichern (AES-256)
             doc.save(
                 output_path,
                 encryption=fitz.PDF_ENCRYPT_AES_256,
                 user_pw=password,
-                owner_pw=None,
+                owner_pw=password,
                 permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
                 garbage=4,
                 deflate=True,
@@ -44610,6 +47161,96 @@ class PDFViewer(QMainWindow):
                 except:
                     pass
             raise e
+
+    def _ensure_insert_doc_password(self, path, provided_password=None):
+        """
+        Stellt sicher, dass für eine einzufügende PDF das Passwort vorliegt.
+        Reihenfolge: provided → gespeichert → Dialog.
+        Rückgabe:
+          - None, wenn die PDF nicht verschlüsselt ist
+          - Passwort-String, wenn verschlüsselt und erfolgreich geprüft
+        Raises:
+          - Exception, wenn der Nutzer abbricht oder das Passwort falsch ist
+        """
+        try:
+            probe = fitz.open(path)
+        except Exception as e:
+            raise Exception(f"PDF kann nicht geöffnet werden: {e}")
+
+        if not (probe.is_encrypted or probe.needs_pass):
+            probe.close()
+            return None
+
+        # 1) Bereits übergebenes Passwort probieren
+        if provided_password:
+            ok = probe.authenticate(provided_password)
+            probe.close()
+            if ok:
+                return provided_password
+            print("DEBUG: _ensure_insert_doc_password – übergebenes PW falsch")
+
+        # 2) Gespeichertes Passwort probieren
+        saved_pw = PDFPasswordManager.get_saved_password(path)
+        if saved_pw:
+            probe2 = fitz.open(path)
+            ok = probe2.authenticate(saved_pw)
+            probe2.close()
+            if ok:
+                print(
+                    f"DEBUG: Insert-PDF mit gespeichertem Passwort geöffnet: "
+                    f"{os.path.basename(path)}"
+                )
+                return saved_pw
+
+        # 3) Dialog
+        pw_dialog = PasswordDialog(self, path, saved_pw)
+        pw_dialog.setWindowModality(Qt.ApplicationModal)
+        pw_dialog.raise_()
+        pw_dialog.activateWindow()
+        if pw_dialog.exec_() != QDialog.Accepted:
+            raise Exception(
+                self.tr("insert_encrypted_required")
+                if hasattr(self, "tr")
+                else "Passwort für die einzufügende PDF wurde nicht eingegeben"
+            )
+
+        pw = getattr(pw_dialog, "password", None)
+        if not pw:
+            raise Exception(
+                "Passwort für die einzufügende PDF wurde nicht eingegeben"
+            )
+
+        probe3 = fitz.open(path)
+        ok = probe3.authenticate(pw)
+        probe3.close()
+        if not ok:
+            raise Exception("Falsches Passwort für die einzufügende PDF")
+
+        try:
+            if (
+                hasattr(pw_dialog, "save_checkbox")
+                and pw_dialog.save_checkbox.isChecked()
+            ):
+                PDFPasswordManager.save_password(path, pw)
+        except Exception:
+            pass
+
+        return pw
+
+    def _migrate_protected_marker_setting(self):
+        """Migriert den alten Default '_geschützt' auf das neue Emoji."""
+        try:
+            settings = QSettings("BinhDiez", "PDFDarkView")
+            current = settings.value("protected_suffix", "", type=str)
+            if current in ("_geschützt", "_geschuetzt", "_protected", "geschützt"):
+                settings.setValue("protected_suffix", _PROTECTED_MARKER_SETTING)
+                settings.sync()
+                print(
+                    f"DEBUG: protected_suffix migriert: "
+                    f"'{current}' -> '{_PROTECTED_MARKER_SETTING}'"
+                )
+        except Exception as e:
+            print(f"WARN: protected_suffix Migration fehlgeschlagen: {e}")
 
     ### -----------------------------------------
     ### EXPORT (Pages, Word, TXT)
@@ -44666,7 +47307,6 @@ class PDFViewer(QMainWindow):
             doc.close()
             self._open_exported_file(output_path, "Pages")
             self.say(self.tr("export_pages_success"))
-            # ????????
             print(f"Export nach Pages")
 
         except Exception as e:
@@ -44759,7 +47399,10 @@ class PDFViewer(QMainWindow):
         temp_ocr_path = self.generate_custom_filename(
             suffixes="_ocr_temp", update_timestamp=False
         )
-        self.ocr_thread = OCRThread(self.pdf_path, temp_ocr_path, self.dark_mode)
+        self.ocr_thread = OCRThread(
+            self.pdf_path,
+            temp_ocr_path, self.dark_mode, password=getattr(self, "current_password", None),lang=self.lang)
+
         # WICHTIG: Verbindung VOR dem Start
         self.ocr_thread.progress_updated.connect(self._update_ocr_progress)
         self.ocr_thread.finished.connect(
@@ -45000,7 +47643,8 @@ class PDFViewer(QMainWindow):
         self.say(self.tr("extract_images_start"))
 
         try:
-            self.extract_thread = ExtractImagesThread(self.pdf_path, settings)
+            self.extract_thread = ExtractImagesThread(self.pdf_path, settings, self.lang, password=getattr(self, "current_password", None))
+
             self.extract_thread.progress_updated.connect(self._update_extract_progress)
             self.extract_thread.finished.connect(self._on_extract_finished)
 
@@ -45115,7 +47759,9 @@ class PDFViewer(QMainWindow):
                 suffixes=[suffix], force_new_file=True
             )
 
-            self.nup_thread = NUpThread(self.pdf_path, output_path, settings)
+            self.nup_thread = NUpThread(self.pdf_path, output_path, settings,
+                self.lang, password=getattr(self, "current_password", None))
+
             self.nup_thread.progress_updated.connect(self._update_nup_progress)
             self.nup_thread.finished.connect(self._on_nup_finished)
 
@@ -45249,7 +47895,8 @@ class PDFViewer(QMainWindow):
             )
 
             # PDF/A-Konvertierung ohne OCR
-            self.pdfa_thread = PDFAThread(self.pdf_path, output_path, settings)
+            self.pdfa_thread = PDFAThread(self.pdf_path, output_path, settings, self.lang, password=getattr(self, "current_password", None))
+
             self.pdfa_thread.progress_updated.connect(self._update_pdfa_progress)
             self.pdfa_thread.finished.connect(self._on_pdfa_finished)
 
@@ -45364,7 +48011,8 @@ class PDFViewer(QMainWindow):
                 suffixes=[suffix], force_new_file=True
             )
 
-            self.flatten_thread = FlattenPDFThread(self.pdf_path, output_path, settings)
+            self.flatten_thread = FlattenPDFThread(self.pdf_path, output_path, settings, self.lang, password=getattr(self, "current_password", None))
+
             self.flatten_thread.progress_updated.connect(self._update_flatten_progress)
             self.flatten_thread.finished.connect(self._on_flatten_finished)
 
@@ -45485,7 +48133,7 @@ class PDFViewer(QMainWindow):
 
             # Optimierungs-Thread starten
             self.optimize_thread = OptimizePDFThread(
-                self.pdf_path, output_path, settings
+                self.pdf_path, output_path, settings, self.lang, password=getattr(self, "current_password", None)
             )
             self.optimize_thread.progress_updated.connect(
                 self._update_optimize_progress
@@ -45633,7 +48281,9 @@ class PDFViewer(QMainWindow):
         settings = dialog.get_data()
 
         # Prüfen ob Overlay-Datei ausgewählt wurde
-        if not settings["overlay_path"] or not os.path.exists(settings["overlay_path"]):
+        if not settings["overlay_path"] or not os.path.exists(
+            settings["overlay_path"]
+        ):
             myUniversalDialog(
                 self,
                 title=self.tr("error"),
@@ -45652,14 +48302,52 @@ class PDFViewer(QMainWindow):
                 suffixes=[suffix], force_new_file=True
             )
 
+            # ---------------------------------------------------------
+            # Kollisionsschutz: Verhindern, dass output_path identisch
+            # mit dem aktuellen PDF-Pfad ist (das führt zu
+            # "save to original must be incremental") oder eine
+            # bereits existierende Datei überschreibt.
+            # ---------------------------------------------------------
+            _src_abs = os.path.abspath(self.pdf_path)
+            _out_abs = os.path.abspath(output_path)
+
+            if _out_abs == _src_abs or os.path.exists(output_path):
+                base, ext = os.path.splitext(output_path)
+                counter = 1
+                while True:
+                    candidate = f"{base}_{counter}{ext}"
+                    if (
+                        os.path.abspath(candidate) != _src_abs
+                        and not os.path.exists(candidate)
+                    ):
+                        output_path = candidate
+                        break
+                    counter += 1
+                print(
+                    f"DEBUG: Overlay-Kollision erkannt, "
+                    f"neuer Zielpfad: {os.path.basename(output_path)}"
+                )
+
             self.overlay_thread = OverlayPDFThread(
-                self.pdf_path, settings["overlay_path"], output_path, settings
+                base_path=self.pdf_path,
+                overlay_path=settings["overlay_path"],
+                output_path=output_path,
+                settings=settings,
+                lang=self.lang,
+                password=getattr(self, "current_password", None),
+                overlay_password=settings.get("overlay_password"),
             )
-            self.overlay_thread.progress_updated.connect(self._update_overlay_progress)
+            self.overlay_thread.progress_updated.connect(
+                self._update_overlay_progress
+            )
             self.overlay_thread.finished.connect(self._on_overlay_finished)
 
             self.overlay_progress_dialog = QProgressDialog(
-                self.tr("overlay_progress"), self.tr("btn_cancel"), 0, 100, self
+                self.tr("overlay_progress"),
+                self.tr("btn_cancel"),
+                0,
+                100,
+                self,
             )
             self.overlay_progress_dialog.setWindowModality(Qt.WindowModal)
             self.overlay_progress_dialog.setMinimumWidth(400)
@@ -46336,7 +49024,7 @@ class PDFViewer(QMainWindow):
             # Neue Suche initialisieren
             self.search_results = []
             self.last_search_term = search_term
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             # Suche durchführen
             for page_num in range(len(doc)):
@@ -46737,6 +49425,8 @@ class PDFViewer(QMainWindow):
         )
         self.say(self.tr("bookmark_added", page_display, name.strip()))
         self.update_bookmark_menu()
+
+        # KEIN EINTRAG IN DIE Metadaten weil Änderung nur in QSettings nicht im PDF
 
     def jump_to_bookmark_from_context(self, bookmark):
         """Springt zu einem Lesezeichen aus dem Kontextmenü."""
@@ -47261,7 +49951,6 @@ class PDFViewer(QMainWindow):
         if input_path is None:
             input_path = self.pdf_path
 
-        # Vor dem Start die Sprache prüfen (nur auf macOS/Linux, auf Windows überspringen)
         if platform.system() != "Windows":
             settings = QSettings("BinhDiez", "PDFDarkView")
             ocr_lang = settings.value("ocr_language", "deu+eng+vie")
@@ -47282,8 +49971,15 @@ class PDFViewer(QMainWindow):
             print(f"📥 Input: {input_path}")
             print(f"📤 Output: {temp_path}")
 
-            self.ocr_thread = OCRThread(input_path, temp_path, self.dark_mode)
-            self.ocr_thread.real_ocr_done = False  # ← Sicherheitshalber
+            self.ocr_thread = OCRThread(
+                input_path,   # ← korrigiert: war self.pdf_path
+                temp_path,
+                self.dark_mode,
+                password=getattr(self, "current_password", None),
+                lang=self.lang,
+            )
+
+            self.ocr_thread.real_ocr_done = False
             self.ocr_thread.progress_updated.connect(self._update_ocr_progress)
             self.ocr_thread.finished.connect(
                 lambda success, msg: self.ocr_completed(
@@ -47298,14 +49994,11 @@ class PDFViewer(QMainWindow):
 
     # 3. ocr_completed() - Verarbeitet Ergebnis
     def ocr_completed(self, success, msg, temp_path, action_name):
-
         try:
             self.ocr_in_progress = False
             self._close_progress_dialog()
 
-            # Plattformspezifische Erfolgsprüfung
             if platform.system() == "Windows":
-                # Unter Windows vertrauen wir allein der Existenz der Datei
                 real_success = (
                     os.path.exists(temp_path) and os.path.getsize(temp_path) > 0
                 )
@@ -47317,7 +50010,6 @@ class PDFViewer(QMainWindow):
                 )
 
             if real_success:
-                # Erfolg: Datei verschieben, Dialog anzeigen, neu laden
                 try:
                     original_size = (
                         os.path.getsize(self.pdf_path)
@@ -47337,21 +50029,93 @@ class PDFViewer(QMainWindow):
                     target_path = self.generate_custom_filename(
                         suffixes=["_ocr"], update_timestamp=False
                     )
-                    final_path = self._prepare_overwrite_target(target_path)
 
-                    shutil.move(temp_path, final_path)
+                    # Wenn der Thread bereits an denselben Pfad geschrieben hat,
+                    # ist das keine Kollision, sondern unsere eigene Datei.
+                    if os.path.abspath(temp_path) == os.path.abspath(target_path):
+                        final_path = temp_path
+                        print(
+                            "DEBUG: OCR-Ergebnis liegt bereits am Zielort: "
+                            + os.path.basename(final_path)
+                        )
+                    else:
+                        final_path = self._prepare_overwrite_target(target_path)
+                        shutil.move(temp_path, final_path)
+                        print(
+                            "DEBUG: OCR-Ergebnis verschoben nach: "
+                            + os.path.basename(final_path)
+                        )
 
-                    # >>> OPTION: Quelldatei löschen, wenn aktiviert
+                    # >>> Quelldatei löschen (Option)
                     self._finalize_save_delete_source(final_path)
+
+                    # -------- 1. Metadaten ZUERST (Datei ist noch unverschlüsselt) --------
+                    try:
+                        meta_doc = fitz.open(final_path)
+                        apply_personal_metadata(
+                            meta_doc,
+                            action_label="_ocr",
+                            password=None,  # Datei ist noch offen
+                        )
+                        meta_tmp = final_path + ".meta.pdf"
+                        meta_doc.save(meta_tmp, garbage=4, deflate=True)
+                        meta_doc.close()
+                        os.replace(meta_tmp, final_path)
+                        print("DEBUG: OCR-Ergebnis: Metadaten ergänzt.")
+                    except Exception as e:
+                        print(f"WARN: Metadaten für OCR-Ergebnis fehlgeschlagen: {e}")
+                        if os.path.exists(final_path + ".meta.pdf"):
+                            try:
+                                os.remove(final_path + ".meta.pdf")
+                            except Exception:
+                                pass
+
+                    # -------- 2. Re-Verschlüsselung wenn Original geschützt war --------
+                    was_encrypted = bool(getattr(self, "current_password", None))
+                    if was_encrypted:
+                        try:
+                            _doc = fitz.open(final_path)
+                            _tmp_enc = final_path + ".enc.pdf"
+                            _doc.save(
+                                _tmp_enc,
+                                encryption=fitz.PDF_ENCRYPT_AES_256,
+                                user_pw=self.current_password,
+                                owner_pw=self.current_password,
+                                permissions=(
+                                    fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY
+                                ),
+                                garbage=4,
+                                deflate=True,
+                            )
+                            _doc.close()
+                            os.replace(_tmp_enc, final_path)
+                            print(
+                                f"DEBUG: OCR-Ausgabe wieder verschlüsselt: "
+                                f"{os.path.basename(final_path)}"
+                            )
+
+                            # -------- 3. Passwort für die neue Datei speichern --------
+                            try:
+                                PDFPasswordManager.save_password(
+                                    final_path, self.current_password
+                                )
+                                print(
+                                    f"DEBUG: Passwort für neue Datei gespeichert: "
+                                    f"{os.path.basename(final_path)}"
+                                )
+                            except Exception as pwe:
+                                print(f"WARN: Passwort speichern fehlgeschlagen: {pwe}")
+                        except Exception as enc_err:
+                            print(
+                                f"WARN: Re-Verschlüsselung fehlgeschlagen: {enc_err}"
+                            )
 
                     original_name = os.path.basename(self.pdf_path)
                     ocr_name = os.path.basename(final_path)
 
-                    # Marker für Textfenster
                     self.ocr_performed = True
                     self.last_ocr_pdf = final_path
 
-                    # ggf. temporäre gedrehte PDF löschen
                     if hasattr(self, "_current_normalized_temp") and os.path.exists(
                         self._current_normalized_temp
                     ):
@@ -47394,7 +50158,11 @@ class PDFViewer(QMainWindow):
                         if self._open_text_window_on_ocr_success:
                             self._open_text_window_next = True
                             self._open_text_window_on_ocr_success = False
-                        self.load_pdf(final_path)
+                        # -------- 4. Neu laden MIT Passwort --------
+                        self.load_pdf(
+                            final_path,
+                            password=getattr(self, "current_password", None),
+                        )
                         self._cached_native = None
                         self._cached_native_path = None
                     else:
@@ -47406,15 +50174,11 @@ class PDFViewer(QMainWindow):
                     error_message = self.tr("ocr_partial_success", temp_path, str(e))
                     QMessageBox.critical(self, self.tr("error"), error_message)
 
-                pass
             else:
-                # Fehler: Aufräumen, Fehlermeldung anzeigen
                 if os.path.exists(temp_path):
                     os.remove(temp_path)
 
-                # Detaillierte Fehlermeldung aufbereiten
                 error_detail = msg if msg else self.tr("ocr_unknown_error")
-                # Begrenze die Länge für den Dialog (optional, aber sinnvoll)
                 if len(error_detail) > 2000:
                     error_detail = error_detail[:2000] + "\n... (Nachricht gekürzt)"
 
@@ -47433,13 +50197,11 @@ class PDFViewer(QMainWindow):
             import traceback
 
             traceback.print_exc()
-            # Zeige Fehler im Dialog an (damit du ihn siehst)
             QMessageBox.critical(
                 self,
                 "Interner Fehler",
                 f"Fehler in ocr_completed:\n{str(e)}\n\nSiehe Konsole für Details.",
             )
-            # Aufräumen nicht vergessen
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             self.ocr_in_progress = False
@@ -47667,40 +50429,42 @@ class PDFViewer(QMainWindow):
         QApplication.processEvents()
 
     # 10. _update_ocr_progress() - Fortschritt aktualisieren
-    def _update_ocr_progress(self, value):
-        """Aktualisiert die OCR-Fortschrittsanzeige (nur Prozentwert)"""
-        # print(f"DEBUG: _update_ocr_progress called with value={value}")
-        # print(f"DEBUG: self.progress_bar = {self.progress_bar}")
-        # print(f"DEBUG: self.loading_label = {self.loading_label}")
-
+    def _update_ocr_progress(self, value, message=""):
+        """
+        Aktualisiert die OCR-Fortschrittsanzeige.
+        Wird mit (int, str) aufgerufen; message kann leer sein, dann
+        faellt die Anzeige auf einen wertbasierten Text zurueck.
+        """
         try:
             if hasattr(self, "progress_bar") and self.progress_bar:
                 self.progress_bar.setValue(value)
 
-            # Statusmeldungen basierend auf Fortschritt
-            if value < 20:
-                # Original: status = "PDF wird analysiert..."
-                status = self.tr("ocr_status_analyzing")
-            elif value < 40:
-                # Original: status = "Bildoptimierung läuft..."
-                status = self.tr("ocr_status_optimizing")
-            elif value < 60:
-                # Original: status = "Texterkennung in Arbeit..."
-                status = self.tr("ocr_status_recognizing")
-            elif value < 80:
-                # Original: status = "Text wird eingebettet..."
-                status = self.tr("ocr_status_embedding")
+            # Bevorzugt den vom Thread gelieferten Phasentext
+            if message:
+                status = message
             else:
-                # Original: status = "Finalisierung der PDF..."
-                status = self.tr("ocr_status_finalizing")
+                # Fallback basierend auf Prozentwert
+                if value < 5:
+                    status = self.tr("ocr_status_analyzing")
+                elif value < 60:
+                    status = self.tr("ocr_status_recognizing")
+                elif value < 65:
+                    status = self.tr("ocr_status_embedding")
+                elif value < 95:
+                    status = self.tr("ocr_status_optimizing")
+                elif value < 100:
+                    status = self.tr("ocr_status_finalizing")
+                else:
+                    status = self.tr("ocr_status_finalizing")
 
             if hasattr(self, "loading_label") and self.loading_label:
                 self.loading_label.setText(status)
 
         except RuntimeError:
-            pass  # Ignoriere Fehler bei zerstörten Objekten
+            pass
 
     ### 11. Prüfung ob OCR erforderlich ist
+
     ### Achtung beide Methoden werden verwendet
     def is_native_pdf(self):
         if not self.pdf_path:
@@ -47716,7 +50480,7 @@ class PDFViewer(QMainWindow):
 
         doc = None
         try:
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             # ===== NEU: Prüfe auf Windows-OCR-Markierung =====
             meta = doc.metadata
@@ -47757,7 +50521,7 @@ class PDFViewer(QMainWindow):
         if not self.pdf_path:
             return False
 
-        doc = fitz.open(self.pdf_path)
+        doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
         try:
             # Maximal 10 Seiten analysieren (performant)
             max_pages = min(len(doc), 10)
@@ -47971,7 +50735,8 @@ class PDFViewer(QMainWindow):
         self._rotating = True
         try:
             target_path = self.generate_custom_filename(
-                suffixes=[self.tr("filename_rotated_suffix")], update_timestamp=False
+                suffixes=[self.tr("filename_rotated_suffix")],
+                update_timestamp=False,
             )
             final_path = self._prepare_overwrite_target(target_path)
 
@@ -47980,7 +50745,8 @@ class PDFViewer(QMainWindow):
                 temp_dir, f"temp_rotate_{os.path.basename(self.pdf_path)}"
             )
 
-            doc = fitz.open(self.pdf_path)
+            # PDF öffnen + authentifizieren (zentral via _open_pdf)
+            doc = self._open_pdf(self.pdf_path)
             page = doc[page_index]
             current_rotation = page.rotation
             new_rotation = (current_rotation + 90) % 360
@@ -47990,6 +50756,27 @@ class PDFViewer(QMainWindow):
 
             shutil.move(temp_path, final_path)
 
+            # Metadaten nachträglich auf die finale Datei setzen
+            # (_open_pdf authentifiziert automatisch)
+            try:
+                meta_doc = self._open_pdf(final_path)
+                apply_personal_metadata(
+                    meta_doc,
+                    action_label=self.tr("filename_rotated_suffix"),
+                )
+                meta_tmp = final_path + ".meta.pdf"
+                meta_doc.save(meta_tmp, garbage=4, deflate=True)
+                meta_doc.close()
+                os.replace(meta_tmp, final_path)
+            except Exception as e:
+                print(f"WARN: Metadaten für Rotation fehlgeschlagen: {e}")
+
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                final_path,
+                getattr(self, "current_password", None),
+                lang=getattr(self, "lang", None),
+            )
             if final_path == self.pdf_path:
                 self.say(self.tr("page_rotated", page_index + 1))
                 self.load_pdf()
@@ -48018,7 +50805,9 @@ class PDFViewer(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('rotate_error')}: {str(e)}"
+                self,
+                self.tr("error"),
+                f"{self.tr('rotate_error')}: {str(e)}",
             )
         finally:
             self._rotating = False
@@ -48061,10 +50850,12 @@ class PDFViewer(QMainWindow):
             # In temporäre Datei speichern, dann verschieben
             temp_dir = tempfile.gettempdir()
             temp_path = os.path.join(
-                temp_dir, f"temp_rotate_all_{os.path.basename(self.pdf_path)}"
+                temp_dir,
+                f"temp_rotate_all_{os.path.basename(self.pdf_path)}",
             )
 
-            doc = fitz.open(self.pdf_path)
+            # PDF öffnen + authentifizieren (zentral via _open_pdf)
+            doc = self._open_pdf(self.pdf_path)
             for page in doc:
                 current_rotation = page.rotation
                 new_rotation = (current_rotation + 90) % 360
@@ -48074,12 +50865,35 @@ class PDFViewer(QMainWindow):
 
             shutil.move(temp_path, final_path)
 
+            # Metadaten nachträglich auf die finale Datei setzen
+            try:
+                meta_doc = self._open_pdf(final_path)
+                apply_personal_metadata(
+                    meta_doc,
+                    action_label=self.tr("filename_rotated_all_suffix"),
+                )
+                meta_tmp = final_path + ".meta.pdf"
+                meta_doc.save(meta_tmp, garbage=4, deflate=True)
+                meta_doc.close()
+                os.replace(meta_tmp, final_path)
+            except Exception as e:
+                print(
+                    f"WARN: Metadaten für alle Seiten drehen fehlgeschlagen: {e}"
+                )
+
+            # >>> Verschlüsselung wiederherstellen
+            reencrypt_pdf_with_password(
+                final_path,
+                getattr(self, "current_password", None),
+                lang=getattr(self, "lang", None),
+            )
             if final_path == self.pdf_path:
                 self.say(self.tr("all_pages_rotated"))
                 self.load_pdf()
             else:
                 msg = self.tr(
-                    "all_pages_rotated_new_file", os.path.basename(final_path)
+                    "all_pages_rotated_new_file",
+                    os.path.basename(final_path),
                 )
                 self.say(self.tr("all_pages_rotated_voice"))
                 dialog = myUniversalDialog(
@@ -48100,7 +50914,9 @@ class PDFViewer(QMainWindow):
 
         except Exception as e:
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('rotate_error')}: {str(e)}"
+                self,
+                self.tr("error"),
+                f"{self.tr('rotate_error')}: {str(e)}",
             )
 
     def rotate_current_page(self):
@@ -48129,23 +50945,91 @@ class PDFViewer(QMainWindow):
             self.say(self.tr("no_pdf_loaded"))
             return
         try:
-            doc = fitz.open(self.pdf_path)
-            if hasattr(self, "current_password") and self.current_password:
-                doc.authenticate(self.current_password)
+            _pw = getattr(self, "current_password", None)
+            doc = self._open_pdf(self.pdf_path)
             page = doc[self.current_page]
             if page.rotation != 0:
                 page.set_rotation(0)
-                temp_path = tempfile.mktemp(suffix=".pdf")
-                doc.save(temp_path, garbage=4, deflate=True)
-                doc.close()
+
+                # Temp-Datei im selben Verzeichnis wie das Original
+                temp_dir = os.path.dirname(self.pdf_path)
+                fd, temp_path = tempfile.mkstemp(
+                    suffix=".pdf", prefix="normalize_", dir=temp_dir
+                )
+                os.close(fd)
+
+                try:
+                    # Metadaten ergänzen (MIT Passwort!)
+                    apply_personal_metadata(
+                        doc,
+                        action_label=self.tr("page_normalized"),
+                        password=_pw,
+                    )
+
+                    # Speichern – mit expliziter Verschlüsselung, wenn
+                    # das Original geschützt war. Das ist der entscheidende
+                    # Unterschied zu vorher (PDF_ENCRYPT_KEEP kann in
+                    # manchen Fällen leere Dateien produzieren).
+                    if _pw:
+                        doc.save(
+                            temp_path,
+                            encryption=fitz.PDF_ENCRYPT_AES_256,
+                            user_pw=_pw,
+                            owner_pw=_pw,
+                            permissions=(
+                                fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY
+                            ),
+                            garbage=4,
+                            deflate=True,
+                        )
+                    else:
+                        doc.save(temp_path, garbage=4, deflate=True)
+                finally:
+                    doc.close()
+
+                # Verifikation: Datei existiert, ist nicht leer und hat Seiten
+                if (
+                    not os.path.exists(temp_path)
+                    or os.path.getsize(temp_path) == 0
+                ):
+                    raise Exception(
+                        "Speichern fehlgeschlagen: Ausgabedatei ist leer"
+                    )
+
+                try:
+                    _test = fitz.open(temp_path)
+                    if _pw and (_test.is_encrypted or _test.needs_pass):
+                        _test.authenticate(_pw)
+                    _pages = len(_test)
+                    _test.close()
+                    if _pages == 0:
+                        raise Exception(
+                            "Speichern fehlgeschlagen: 0 Seiten in Ausgabedatei"
+                        )
+                except Exception as ve:
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+                    raise Exception(f"Verifikation fehlgeschlagen: {ve}")
+
+                # Original ersetzen
                 shutil.move(temp_path, self.pdf_path)
-                self.load_pdf()
+
+                # Neu laden MIT Passwort (sonst fragt die App nicht nach
+                # dem gespeicherten Passwort und lädt die Datei nicht)
+                self.load_pdf(self.pdf_path, password=_pw)
                 self.say(self.tr("page_normalized", self.current_page + 1))
             else:
-                self.say(self.tr("page_already_upright", self.current_page + 1))
+                doc.close()
+                self.say(
+                    self.tr("page_already_upright", self.current_page + 1)
+                )
         except Exception as e:
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('rotate_error')}: {str(e)}"
+                self,
+                self.tr("error"),
+                f"{self.tr('rotate_error')}: {str(e)}",
             )
 
     def normalize_all_pages(self):
@@ -48154,26 +51038,81 @@ class PDFViewer(QMainWindow):
             self.say(self.tr("no_pdf_loaded"))
             return
         try:
-            doc = fitz.open(self.pdf_path)
-            if hasattr(self, "current_password") and self.current_password:
-                doc.authenticate(self.current_password)
+            _pw = getattr(self, "current_password", None)
+            doc = self._open_pdf(self.pdf_path)
             changed = False
             for page in doc:
                 if page.rotation != 0:
                     page.set_rotation(0)
                     changed = True
+
             if changed:
-                temp_path = tempfile.mktemp(suffix=".pdf")
-                doc.save(temp_path, garbage=4, deflate=True)
-                doc.close()
+                temp_dir = os.path.dirname(self.pdf_path)
+                fd, temp_path = tempfile.mkstemp(
+                    suffix=".pdf", prefix="normalize_all_", dir=temp_dir
+                )
+                os.close(fd)
+
+                try:
+                    apply_personal_metadata(
+                        doc,
+                        action_label=self.tr("all_pages_normalized"),
+                        password=_pw,
+                    )
+
+                    if _pw:
+                        doc.save(
+                            temp_path,
+                            encryption=fitz.PDF_ENCRYPT_AES_256,
+                            user_pw=_pw,
+                            owner_pw=_pw,
+                            permissions=(
+                                fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY
+                            ),
+                            garbage=4,
+                            deflate=True,
+                        )
+                    else:
+                        doc.save(temp_path, garbage=4, deflate=True)
+                finally:
+                    doc.close()
+
+                if (
+                    not os.path.exists(temp_path)
+                    or os.path.getsize(temp_path) == 0
+                ):
+                    raise Exception(
+                        "Speichern fehlgeschlagen: Ausgabedatei ist leer"
+                    )
+
+                try:
+                    _test = fitz.open(temp_path)
+                    if _pw and (_test.is_encrypted or _test.needs_pass):
+                        _test.authenticate(_pw)
+                    _pages = len(_test)
+                    _test.close()
+                    if _pages == 0:
+                        raise Exception(
+                            "Speichern fehlgeschlagen: 0 Seiten in Ausgabedatei"
+                        )
+                except Exception as ve:
+                    try:
+                        os.remove(temp_path)
+                    except Exception:
+                        pass
+                    raise Exception(f"Verifikation fehlgeschlagen: {ve}")
+
                 shutil.move(temp_path, self.pdf_path)
-                self.load_pdf()
+                self.load_pdf(self.pdf_path, password=_pw)
                 self.say(self.tr("all_pages_normalized"))
             else:
+                doc.close()
                 self.say(self.tr("all_pages_already_upright"))
         except Exception as e:
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('rotate_error')}: {str(e)}"
+                self,
+                self.tr("error"),
+                f"{self.tr('rotate_error')}: {str(e)}",
             )
 
     ###-----------------------------------
@@ -48316,7 +51255,7 @@ class PDFViewer(QMainWindow):
             # 5. Worker-Thread erstellen und starten
             suffix = self.tr("filename_pages_deleted")
             self.delete_worker = DeletePagesWorker(
-                self.pdf_path, selection, self.lang, self.create_backup, suffix
+                self.pdf_path, selection, self.lang, self.create_backup, suffix, password=getattr(self, "current_password", None),
             )
 
             self.delete_worker.progress_updated.connect(self._update_delete_progress)
@@ -48467,34 +51406,105 @@ class PDFViewer(QMainWindow):
             self.process_page_insertion(selection)
 
     def process_page_insertion(self, selection):
-        """Verarbeitet das Einfügen von Seiten und öffnet die neue Datei"""
+        """Verarbeitet das Einfügen von Seiten und öffnet die neue Datei."""
         main_doc = None
         insert_doc = None
         new_doc = None
         temp_dir = None
 
         try:
+            # Passwörter ermitteln
+            _pw_main = getattr(self, "current_password", None)
+            _pw_insert = selection.get("insert_password")
+            _pw_insert = self._ensure_insert_doc_password(
+                selection["pdf_path"], _pw_insert
+            )
+
             temp_dir = tempfile.mkdtemp(prefix="pdf_insert_")
-            main_doc = fitz.open(self.pdf_path)
+
+            # Haupt-PDF mit dem eigenen Passwort öffnen
+            main_doc = self._open_pdf(self.pdf_path)
+
+            # Einfüge-PDF mit ihrem eigenen Passwort öffnen
             insert_doc = fitz.open(selection["pdf_path"])
+            if insert_doc.is_encrypted or insert_doc.needs_pass:
+                if not _pw_insert or not insert_doc.authenticate(_pw_insert):
+                    insert_doc.close()
+                    raise Exception(
+                        "Falsches Passwort für die einzufügende PDF"
+                    )
+
             inserted_pages = len(insert_doc)
 
             # Zielpfad ermitteln
             target_path = self.generate_custom_filename(
-                suffixes=[self.tr("filename_insert_suffix")], update_timestamp=True
+                suffixes=[self.tr("filename_insert_suffix")],
+                update_timestamp=True,
             )
             final_path = self._prepare_overwrite_target(target_path)
 
             temp_output = os.path.join(temp_dir, "merged_temp.pdf")
 
+            # Neue PDF zusammenbauen
             new_doc = fitz.open()
             if selection["position"] > 0:
-                new_doc.insert_pdf(main_doc, to_page=selection["position"] - 1)
+                new_doc.insert_pdf(
+                    main_doc, to_page=selection["position"] - 1
+                )
             new_doc.insert_pdf(insert_doc)
             if selection["position"] < len(main_doc):
-                new_doc.insert_pdf(main_doc, from_page=selection["position"])
+                new_doc.insert_pdf(
+                    main_doc, from_page=selection["position"]
+                )
 
-            new_doc.save(temp_output, garbage=4, deflate=True)
+            # Metadaten: Basis-Metadaten aus der Haupt-PDF übernehmen
+            copy_pdf_metadata(main_doc, new_doc)
+            # persönlichen Eintrag ergänzen – EINMALIG
+            apply_personal_metadata(
+                new_doc,
+                action_label=self.tr("filename_insert_suffix"),
+                password=_pw_main,
+            )
+
+            # Speichern – verschlüsselt, wenn die Haupt-PDF geschützt war
+            if _pw_main:
+                new_doc.save(
+                    temp_output,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=_pw_main,
+                    owner_pw=_pw_main,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                    garbage=4,
+                    deflate=True,
+                )
+            else:
+                new_doc.save(temp_output, garbage=4, deflate=True)
+
+            # Verifikation
+            if (
+                not os.path.exists(temp_output)
+                or os.path.getsize(temp_output) == 0
+            ):
+                raise Exception(
+                    "Speichern fehlgeschlagen: Ausgabedatei ist leer"
+                )
+            try:
+                _test = fitz.open(temp_output)
+                if _pw_main and (_test.is_encrypted or _test.needs_pass):
+                    _test.authenticate(_pw_main)
+                _pages = len(_test)
+                _test.close()
+                if _pages == 0:
+                    raise Exception(
+                        "Speichern fehlgeschlagen: 0 Seiten in Ausgabedatei"
+                    )
+            except Exception as ve:
+                try:
+                    os.remove(temp_output)
+                except Exception:
+                    pass
+                raise Exception(f"Verifikation fehlgeschlagen: {ve}")
+
             new_doc.close()
             new_doc = None
             main_doc.close()
@@ -48515,7 +51525,9 @@ class PDFViewer(QMainWindow):
                         "pages_inserted_overwrite_with_backup", inserted_pages
                     )
                 else:
-                    msg = self.tr("pages_inserted_overwrite_no_backup", inserted_pages)
+                    msg = self.tr(
+                        "pages_inserted_overwrite_no_backup", inserted_pages
+                    )
             else:
                 msg = self.tr(
                     "pages_inserted_new_file",
@@ -48530,7 +51542,6 @@ class PDFViewer(QMainWindow):
 
             self.say(self.tr("pages_inserted_voice_new", inserted_pages))
 
-            # Dialog mit Option zum Öffnen
             dialog = myUniversalDialog(
                 self,
                 title=self.tr("success"),
@@ -48546,15 +51557,12 @@ class PDFViewer(QMainWindow):
             )
             dialog.exec_()
 
-            # Öffne die neue Datei, wenn gewünscht
             if dialog.result_value == "open":
-                self._load_new_file(final_path)
-
-            # Wenn Überschreiben-Modus aktiv war, aktualisiere den aktuellen Pfad
+                self._load_new_file(final_path, password=_pw_main)
             elif behavior == "overwrite":
                 self.pdf_path = final_path
                 current_mode = self.zoom_mode
-                self.load_pdf()
+                self.load_pdf(final_path, password=_pw_main)
                 self.set_zoom_mode(current_mode)
 
         except Exception as e:
@@ -48566,12 +51574,12 @@ class PDFViewer(QMainWindow):
                 if doc is not None:
                     try:
                         doc.close()
-                    except:
+                    except Exception:
                         pass
             if temp_dir and os.path.exists(temp_dir):
                 try:
                     shutil.rmtree(temp_dir, ignore_errors=True)
-                except:
+                except Exception:
                     pass
 
     def _load_new_file(self, file_path, password=None):
@@ -48587,7 +51595,9 @@ class PDFViewer(QMainWindow):
         self.pdf_path = file_path
         if password:
             self.current_password = password
-        self.load_pdf()
+
+        # Passwort mitgeben, damit die App es nicht erneut abfragt
+        self.load_pdf(file_path, password=password)
 
     ###------------------------------------
     ### SEITEN VERSCHIEBEN
@@ -48729,7 +51739,7 @@ class PDFViewer(QMainWindow):
             # Original: self.move_worker = MovePagesWorker(self.pdf_path, selection)
             suffix = self.tr("filename_pages_moved")
             self.move_worker = MovePagesWorker(
-                self.pdf_path, selection, self.lang, self.create_backup, suffix
+                self.pdf_path, selection, self.lang, self.create_backup, suffix, password=getattr(self, "current_password", None)
             )
 
             self.move_worker.progress_updated.connect(self._update_move_progress)
@@ -49200,14 +52210,26 @@ class PDFViewer(QMainWindow):
                 suffixes=[suffix], force_new_file=True
             )
 
-            self.pagesize_thread = PageSizeThread(self.pdf_path, output_path, settings)
+            self.pagesize_thread = PageSizeThread(
+                self.pdf_path,
+                output_path,
+                settings,
+                password=getattr(self, "current_password", None),
+                lang=self.lang,
+                suffix=suffix,
+            )
+
             self.pagesize_thread.progress_updated.connect(
                 self._update_pagesize_progress
             )
             self.pagesize_thread.finished.connect(self._on_pagesize_finished)
 
             self.pagesize_progress_dialog = QProgressDialog(
-                self.tr("pagesize_progress"), self.tr("btn_cancel"), 0, 100, self
+                self.tr("pagesize_progress"),
+                self.tr("btn_cancel"),
+                0,
+                100,
+                self,
             )
             self.pagesize_progress_dialog.setWindowModality(Qt.WindowModal)
             self.pagesize_progress_dialog.setMinimumWidth(400)
@@ -49235,12 +52257,20 @@ class PDFViewer(QMainWindow):
             print(f"Fehler beim Ändern der Seitengröße: {e}")
             traceback.print_exc()
 
-    def _update_pagesize_progress(self, progress, message):
-        """Aktualisiert den Fortschritts-Dialog."""
-        if hasattr(self, "pagesize_progress_dialog") and self.pagesize_progress_dialog:
-            self.pagesize_progress_dialog.setValue(progress)
-            if message:
-                self.pagesize_progress_dialog.setLabelText(message)
+    def _update_pagesize_progress(self, value, message=""):
+        # Nur zugreifen, wenn Dialog existiert UND noch nicht zerstört ist
+        dlg = getattr(self, "pagesize_progress_dialog", None)
+        if dlg is None:
+            return
+        try:
+            from PyQt5 import sip
+            if sip.isdeleted(dlg):
+                return
+        except Exception:
+            pass
+        dlg.setValue(value)
+        if message:
+            dlg.setLabelText(message)
 
     def _cancel_pagesize(self):
         """Bricht das Ändern der Seitengröße ab."""
@@ -49387,6 +52417,8 @@ class PDFViewer(QMainWindow):
         is_protected=None,
         update_timestamp=True,
         force_new_file=False,
+        strip_protection_marker=False,
+        strip_suffixes=None,
     ):
         """
         Wrapper für FilenameGenerator.
@@ -49402,13 +52434,74 @@ class PDFViewer(QMainWindow):
                 # Original überschreiben: gebe aktuellen Pfad zurück (KEIN Backup hier!)
                 return self.pdf_path
 
+        # Vor dem Generieren die Suffix-Liste der aktuellen Sprache
+        # persistieren. Dadurch lernt der Parser auch bei einem Sprachwechsel
+        # innerhalb der laufenden Sitzung die neuen Suffixe.
+        try:
+            self._refresh_persisted_action_suffixes()
+        except Exception as e:
+            print(f"[generate_custom_filename] Suffix-Persist fehlgeschlagen: {e}")
+
         return FilenameGenerator.generate(
             pdf_path=self.pdf_path,
             base_name=base_name,
             suffixes=suffixes,
             is_protected=is_protected,
             update_timestamp=update_timestamp,
+            strip_protection_marker=strip_protection_marker,
+            strip_suffixes=strip_suffixes,
         )
+
+    def _refresh_persisted_action_suffixes(self):
+        """
+        Sammelt alle Übersetzungen für Action-Suffixe aus der aktuellen
+        Sprache und speichert sie in QSettings unter
+        'filename/known_action_suffixes'.
+
+        Wird beim App-Start und einmal nach jedem Speichern aufgerufen.
+        Dadurch kennt der Parser auch Suffixe aus früheren Sitzungen
+        und anderen Sprachen und kann sie zuverlässig entfernen.
+        """
+        suffix_keys = [
+            "filename_with_signature",
+            "filename_with_text",
+            "filename_with_images", "filename_with_image",
+            "filename_with_forms", "filename_with_form",
+            "filename_with_page_number", "filename_with_page_numbers",
+            "filename_with_watermark",
+            "filename_with_redacted_text",
+            "filename_with_insertion", "filename_with_insertions",
+            "filename_with_date",
+            "filename_with_my_page_declaration",
+            "filename_page_moved", "filename_page_deleted",
+        ]
+
+        settings = QSettings("BinhDiez", "PDFDarkView")
+        existing = settings.value("filename/known_action_suffixes", [], type=list)
+        if not isinstance(existing, list):
+            existing = []
+
+        added = 0
+        for key in suffix_keys:
+            try:
+                val = self.tr(key)
+            except Exception:
+                continue
+            if not val or not isinstance(val, str):
+                continue
+            if val.startswith("DEBUG") or val == key:
+                continue
+            if val not in existing:
+                existing.append(val)
+                added += 1
+
+        if added:
+            if len(existing) > 300:
+                existing = existing[-300:]
+            settings.setValue("filename/known_action_suffixes", existing)
+            settings.sync()
+            print(f"[PersistSuffixes] {added} neue Suffixe gespeichert, "
+                f"gesamt={len(existing)}")
 
     ### Option im Dateinamen Dialog:
     ### Quelldatei nach erfolgreichem Speichern löschen
@@ -49462,10 +52555,22 @@ class PDFViewer(QMainWindow):
     ):
         """Lädt PDF neu und scrollt zur Position – ohne Timer, mit Callback."""
         try:
-            # >>> OPTION: Quelldatei löschen, wenn aktiviert (Sicherheitsnetz)
+            # Aktuelle Sprachsuffixe persistieren (falls neu geladen)
+            self._refresh_persisted_action_suffixes()
+
+            # >>> Quelldatei löschen, wenn aktiviert (Sicherheitsnetz)
             self._finalize_save_delete_source(pdf_path)
 
+            # >>> Verschlüsselung wiederherstellen, falls Original geschützt war
+            if getattr(self, "current_password", None):
+                reencrypt_pdf_with_password(
+                    pdf_path,
+                    self.current_password,
+                    lang=getattr(self, "lang", None),
+                )
+
             print(f"\n=== PDF NEU LADEN - ZIELSEITE: {target_page + 1} ===")
+
             self._cleanup_all_modes()
             self.pdf_path = pdf_path
 
@@ -49717,9 +52822,7 @@ class PDFViewer(QMainWindow):
             return True
 
         try:
-            doc = fitz.open(self.pdf_path)
-            if hasattr(self, "current_password") and self.current_password:
-                doc.authenticate(self.current_password)
+            doc = self._open_pdf(self.pdf_path)
             page = doc[page_num]
             rotation = page.rotation
             doc.close()
@@ -50833,9 +53936,7 @@ class PDFViewer(QMainWindow):
             return True
 
         try:
-            doc = fitz.open(self.pdf_path)
-            if hasattr(self, "current_password") and self.current_password:
-                doc.authenticate(self.current_password)
+            doc = self._open_pdf(self.pdf_path)
             page = doc[page_index]
             rotation = page.rotation
             doc.close()
@@ -50934,7 +54035,7 @@ class PDFViewer(QMainWindow):
                 temp_dir, f"temp_rotate_silent_{os.path.basename(self.pdf_path)}"
             )
 
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
             page = doc[page_index]
             current_rotation = page.rotation
             new_rotation = (current_rotation + 90) % 360
@@ -50959,9 +54060,7 @@ class PDFViewer(QMainWindow):
 
         for attempt in range(max_attempts):
             try:
-                doc = fitz.open(self.pdf_path)
-                if hasattr(self, "current_password") and self.current_password:
-                    doc.authenticate(self.current_password)
+                doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
                 page = doc[page_index]
                 current_rotation = page.rotation
                 doc.close()
@@ -52790,12 +55889,7 @@ class PDFViewer(QMainWindow):
                 doc = self.current_doc
                 print("DEBUG: Verwende aktuelles Dokument für Texte/Kreuze")
             else:
-                doc = fitz.open(self.pdf_path)
-                if hasattr(self, "current_password") and self.current_password:
-                    doc.authenticate(self.current_password)
-                    print("DEBUG: Dokument neu geöffnet mit Passwort")
-                else:
-                    print("DEBUG: Dokument neu geöffnet ohne Passwort")
+                doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             print(f"DEBUG: Dokument hat {len(doc)} Seiten")
 
@@ -52998,7 +56092,13 @@ class PDFViewer(QMainWindow):
                                     width=1,
                                 )
 
-            # SPEICHERN
+            # ========== 4. SPEICHERN ==========
+            # >>> Metadaten mit persönlichem Eintrag ergänzen
+            apply_personal_metadata(
+                doc, action_label=self.tr("filename_with_text"),
+                password=getattr(self, "current_password", None),
+            )
+
             target_path = self.generate_custom_filename(
                 suffixes=[self.tr("filename_with_text")]
             )
@@ -54258,12 +57358,7 @@ class PDFViewer(QMainWindow):
                 doc = self.current_doc
                 print("DEBUG: Verwende aktuelles Dokument für Signaturen")
             else:
-                doc = fitz.open(self.pdf_path)
-                if hasattr(self, "current_password") and self.current_password:
-                    doc.authenticate(self.current_password)
-                    print("DEBUG: Dokument neu geöffnet mit Passwort")
-                else:
-                    print("DEBUG: Dokument neu geöffnet ohne Passwort")
+                doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             # ========== 3. SIGNATUREN EINBETTEN ==========
             for data in sig_data:
@@ -54343,6 +57438,13 @@ class PDFViewer(QMainWindow):
 
 
             # ========== 4. SPEICHERN ==========
+            # >>> Metadaten mit persönlichem Eintrag ergänzen
+            apply_personal_metadata(
+                doc, action_label=self.tr("filename_with_signature"),
+                password=getattr(self, "current_password", None),
+            )
+
+
             target_path = self.generate_custom_filename(
                 suffixes=[self.tr("filename_with_signature")]
             )
@@ -55503,12 +58605,7 @@ class PDFViewer(QMainWindow):
                 doc = self.current_doc
                 print("DEBUG: Verwende aktuelles Dokument für Bilder")
             else:
-                doc = fitz.open(self.pdf_path)
-                if hasattr(self, "current_password") and self.current_password:
-                    doc.authenticate(self.current_password)
-                    print("DEBUG: Dokument neu geöffnet mit Passwort")
-                else:
-                    print("DEBUG: Dokument neu geöffnet ohne Passwort")
+                doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             for data in images_data:
                 page_num = data["page"]
@@ -55533,6 +58630,12 @@ class PDFViewer(QMainWindow):
                 height_pt = pixmap.height() * scale_y
                 rect = fitz.Rect(x_pt, y_pt, x_pt + width_pt, y_pt + height_pt)
                 page.insert_image(rect, filename=data["original_path"])
+
+            # >>> Metadaten mit persönlichem Eintrag ergänzen
+            apply_personal_metadata(
+                doc, action_label=self.tr("filename_with_image"),
+                password=getattr(self, "current_password", None),
+            )
 
             target_path = self.generate_custom_filename(
                 suffixes=[self.tr("filename_with_image")]
@@ -56919,12 +60022,7 @@ class PDFViewer(QMainWindow):
                 doc = self.current_doc
                 print("DEBUG: Verwende aktuelles Dokument für Formen")
             else:
-                doc = fitz.open(self.pdf_path)
-                if hasattr(self, "current_password") and self.current_password:
-                    doc.authenticate(self.current_password)
-                    print("DEBUG: Dokument neu geöffnet mit Passwort")
-                else:
-                    print("DEBUG: Dokument neu geöffnet ohne Passwort")
+                doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             for data in forms_data:
                 page_num = data["page"]
@@ -57010,6 +60108,13 @@ class PDFViewer(QMainWindow):
                         page.draw_oval(
                             rect_pdf, color=color_rgb, fill=fill, width=line_width_pdf
                         )
+
+            # >>> Metadaten mit persönlichem Eintrag ergänzen
+            apply_personal_metadata(
+                doc, action_label=self.tr("filename_with_forms"),
+                password=getattr(self, "current_password", None),
+            )
+
 
             # Speichern
             target_path = self.generate_custom_filename(
@@ -57271,6 +60376,8 @@ class PDFViewer(QMainWindow):
         self.say(self.tr("page_numbers_start"))
 
         try:
+            _pw = getattr(self, "current_password", None)
+
             # Suffix basierend auf dem gewählten Inhaltstyp
             tab_index = settings.get("tab_index", 0)
             if tab_index == 0:
@@ -57287,22 +60394,38 @@ class PDFViewer(QMainWindow):
                 suffixes=[suffix], force_new_file=True
             )
 
-            # PDF öffnen
-            doc = fitz.open(self.pdf_path)
+            # ---------------------------------------------------------
+            # Kollisionsschutz: Verhindern, dass output_path mit der
+            # Quelldatei identisch ist oder eine existierende Datei
+            # überschreibt. Ursache: Das Suffix ist schon im Namen.
+            # ---------------------------------------------------------
+            _src_abs = os.path.abspath(self.pdf_path)
+            _out_abs = os.path.abspath(output_path)
 
-            # Falls passwortgeschützt, authentifizieren
-            if doc.is_encrypted or doc.needs_pass:
-                if hasattr(self, "current_password") and self.current_password:
-                    if not doc.authenticate(self.current_password):
-                        raise Exception(self.tr("password_wrong"))
-                else:
-                    raise Exception(self.tr("pdf_encrypted"))
+            if _out_abs == _src_abs or os.path.exists(output_path):
+                base, ext = os.path.splitext(output_path)
+                counter = 1
+                while True:
+                    candidate = f"{base}_{counter}{ext}"
+                    if (
+                        os.path.abspath(candidate) != _src_abs
+                        and not os.path.exists(candidate)
+                    ):
+                        output_path = candidate
+                        break
+                    counter += 1
+                print(
+                    f"DEBUG: Seitenzahlen-Kollision erkannt, neuer "
+                    f"Zielpfad: {os.path.basename(output_path)}"
+                )
+
+            # PDF öffnen
+            doc = self._open_pdf(self.pdf_path)
 
             # Schriftart-Einstellungen
             font_name = settings["font_family"]
             font_size = settings["font_size"]
 
-            # Versuche, die Schriftart-Datei zu finden
             font_file = self._find_font_file(
                 font_name, settings["bold"], settings["italic"]
             )
@@ -57358,7 +60481,6 @@ class PDFViewer(QMainWindow):
 
                 page_num_display = page_num + 1
 
-                # Prüfen ob in gewähltem Bereich
                 if (
                     page_num_display < settings["start_page"]
                     or page_num_display > settings["end_page"]
@@ -57369,29 +60491,24 @@ class PDFViewer(QMainWindow):
                 page = doc[page_num]
                 page_rect = page.rect
 
-                # Text generieren
                 page_text = text_generator(page_num_display, total_pages)
 
-                # Text-Größe berechnen (ungefähre Breite)
                 text_width = len(page_text) * font_size * 0.6
 
-                # X-Position berechnen
-                if x_align == 0:  # Links
+                if x_align == 0:
                     x = margin_x
-                elif x_align == 1:  # Mitte
+                elif x_align == 1:
                     x = (page_rect.width - text_width) / 2
-                else:  # Rechts
+                else:
                     x = page_rect.width - text_width - margin_x
 
-                # Y-Position berechnen
-                if y_align == 0:  # Oben
+                if y_align == 0:
                     y = margin_y
-                elif y_align == 1:  # Mitte
+                elif y_align == 1:
                     y = page_rect.height / 2
-                else:  # Unten
+                else:
                     y = page_rect.height - margin_y
 
-                # Text auf Seite einfügen
                 try:
                     if font_file and os.path.exists(font_file):
                         page.insert_text(
@@ -57402,7 +60519,6 @@ class PDFViewer(QMainWindow):
                             color=color_rgb,
                         )
                     else:
-                        # Fallback: Verwende Helvetica
                         page.insert_text(
                             (x, y),
                             page_text,
@@ -57411,7 +60527,6 @@ class PDFViewer(QMainWindow):
                             color=color_rgb,
                         )
                 except Exception as e:
-                    # Letzter Fallback
                     print(f"Font-Fallback: {e}")
                     page.insert_text(
                         (x, y), page_text, fontsize=font_size, color=color_rgb
@@ -57422,11 +60537,30 @@ class PDFViewer(QMainWindow):
 
             progress_dialog.close()
 
-            # PDF speichern
-            doc.save(output_path, garbage=4, deflate=True)
+            # Metadaten ergänzen
+            apply_personal_metadata(
+                doc, action_label=suffix, password=_pw
+            )
+
+            # Speichern – verschlüsselt, wenn Original geschützt war
+            if _pw:
+                doc.save(
+                    output_path,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=_pw,
+                    owner_pw=_pw,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                    garbage=4,
+                    deflate=True,
+                )
+            else:
+                doc.save(output_path, garbage=4, deflate=True)
             doc.close()
 
-            # Erfolgsmeldung mit dem Dateinamen
+            # Quelldatei löschen (Option)
+            self._finalize_save_delete_source(output_path)
+
+            # Erfolgsmeldung
             filename = os.path.basename(output_path)
             success_message = self.tr("page_numbers_success", filename)
 
@@ -57447,7 +60581,7 @@ class PDFViewer(QMainWindow):
 
             if confirm_dialog.result_value == "yes":
                 self.close_current_pdf()
-                self.load_pdf(output_path)
+                self.load_pdf(output_path, password=_pw)
 
         except Exception as e:
             error_msg = self.tr("page_numbers_error_format", str(e))
@@ -57462,6 +60596,7 @@ class PDFViewer(QMainWindow):
             ).exec_()
             print(f"Fehler beim Einfügen von Seitenzahlen: {e}")
             traceback.print_exc()
+
 
     def _find_font_file(self, font_name, bold=False, italic=False):
         """Findet die Schriftart-Datei für den gegebenen Schriftnamen."""
@@ -57977,9 +61112,7 @@ class PDFViewer(QMainWindow):
                 shutil.copy2(self.pdf_path, backup_path)
                 print(f"Backup vor Schwärzung: {backup_path}")
 
-            doc = fitz.open(self.pdf_path)
-            if hasattr(self, "current_password") and self.current_password:
-                doc.authenticate(self.current_password)
+            doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
 
             # Für jede Seite: Redactions hinzufügen
             for page_num, items in redactions_by_page.items():
@@ -58020,6 +61153,12 @@ class PDFViewer(QMainWindow):
 
                 # Redactions auf der Seite anwenden
                 page.apply_redactions()
+
+            # >>> Metadaten mit persönlichem Eintrag ergänzen
+            apply_personal_metadata(
+                doc, action_label=self.tr("filename_redacted"),
+                password=getattr(self, "current_password", None)
+            )
 
             # Speichern
             target_path = self.generate_custom_filename(
@@ -58117,7 +61256,10 @@ class PDFViewer(QMainWindow):
             )
 
             # Crop-Thread starten
-            self.crop_thread = CropPDFThread(self.pdf_path, output_path, settings)
+            self.crop_thread = CropPDFThread(self.pdf_path, output_path, settings,
+                self.lang, password=getattr(self, "current_password", None)
+            )
+
             self.crop_thread.progress_updated.connect(self._update_crop_progress)
             self.crop_thread.finished.connect(self._on_crop_finished)
 
@@ -58372,7 +61514,8 @@ class PDFViewer(QMainWindow):
         current_mode = self.zoom_mode
 
         if hasattr(self, "pdf_path") and self.pdf_path:
-            self.load_pdf()
+            _pw = getattr(self, "current_password", None)
+            self.load_pdf(self.pdf_path, password=_pw)
             self.set_zoom_mode(current_mode)
             print("✅ PDF erfolgreich neu geladen")
         else:
@@ -58615,7 +61758,8 @@ class PDFViewer(QMainWindow):
         # PDF neu laden falls erforderlich
         if hasattr(self, "pdf_path") and self.pdf_path:
             self._save_overlay_data()
-            self.load_pdf()
+            _pw = getattr(self, "current_password", None)
+            self.load_pdf(self.pdf_path, password=_pw)
 
     def set_gray_threshold(self, value):
         """Setzt den Graustufen-Schwellwert und lädt PDF neu."""
@@ -58634,7 +61778,8 @@ class PDFViewer(QMainWindow):
         # PDF neu laden, falls eines geladen ist und wir im Smart-Modus sind
         if hasattr(self, "pdf_path") and self.pdf_path and self.invert_mode == "smart":
             self._save_overlay_data()
-            self.load_pdf()
+            _pw = getattr(self, "current_password", None)
+            self.load_pdf(self.pdf_path, password=_pw)
             self.say(self.tr("threshold_changed", value))
 
     def on_threshold_changed(self, index):
@@ -59353,7 +62498,7 @@ class PDFViewer(QMainWindow):
                 print(f"Ungültige Position {new_index}")
                 # "Ungültige Position"
                 self.say(self.tr("drag_position_invalid"))
-                self._animate_page_back(page_item)
+                # self._animate_page_back(page_item)
                 return
 
             # Fall 2: Gleiche Position
@@ -59361,7 +62506,7 @@ class PDFViewer(QMainWindow):
                 print("Gleiche Position")
                 # "Seite {0} bleibt auf Position {0}"
                 self.say(self.tr("drag_same_position", old_page_number))
-                self._animate_page_back(page_item)
+                # self._animate_page_back(page_item)
                 return
 
             # Fall 3: Gültige neue Position
@@ -59387,7 +62532,7 @@ class PDFViewer(QMainWindow):
                 print("PDF-Änderung fehlgeschlagen")
                 # "Fehler beim Verschieben"
                 self.say(self.tr("drag_error"))
-                self._animate_page_back(page_item)
+                # self._animate_page_back(page_item)
                 self.last_page_move_info = None
 
             print("=== DROP VORGANG BEENDET ===\n")
@@ -59502,20 +62647,20 @@ class PDFViewer(QMainWindow):
             return 0
 
     def _perform_page_move(self, from_index, to_index):
-        """Führt Seitenverschiebung durch"""
+        """Führt Seitenverschiebung durch."""
         try:
             print(f"\n=== PERFORM PAGE MOVE ===")
             print(f"Von Index: {from_index} (Seite {from_index + 1})")
             print(f"Zu Index: {to_index}")
 
+            _pw = getattr(self, "current_password", None)
+
             # PDF öffnen
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path)
             total_pages = len(doc)
 
             print(f"PDF hat {total_pages} Seiten")
 
-            # to_index kann total_pages sein (Position nach der letzten Seite)
-            # Wenn to_index == from_index, nichts tun
             if to_index == from_index:
                 print("Keine Änderung benötigt")
                 doc.close()
@@ -59524,55 +62669,50 @@ class PDFViewer(QMainWindow):
             # Neue PDF erstellen
             new_doc = fitz.open()
 
-            # FALL 1: Seite ans Ende verschieben (to_index == total_pages)
+            # FALL 1: Ans Ende
             if to_index == total_pages:
                 print(f"FALL 1: Verschiebe Seite {from_index + 1} ans ENDE")
-                # Alle Seiten außer der zu verschiebenden kopieren
                 for i in range(total_pages):
                     if i != from_index:
                         new_doc.insert_pdf(doc, from_page=i, to_page=i)
-                # Dann die zu verschiebende Seite anhängen
                 new_doc.insert_pdf(doc, from_page=from_index, to_page=from_index)
 
-            # FALL 2: Seite nach VORNE verschieben (to_index < from_index)
+            # FALL 2: Nach vorne
             elif to_index < from_index:
                 print(
-                    f"FALL 2: Verschiebe Seite {from_index + 1} nach VORNE an Position {to_index + 1}"
+                    f"FALL 2: Verschiebe Seite {from_index + 1} nach VORNE "
+                    f"an Position {to_index + 1}"
                 )
                 for i in range(total_pages):
                     if i == to_index:
-                        # Hier die verschobene Seite einfügen
                         new_doc.insert_pdf(
                             doc, from_page=from_index, to_page=from_index
                         )
                     if i != from_index:
                         new_doc.insert_pdf(doc, from_page=i, to_page=i)
 
-            # FALL 3: Seite nach HINTEN verschieben (to_index > from_index)
-            else:  # to_index > from_index
+            # FALL 3: Nach hinten
+            else:
                 print(
-                    f"FALL 3: Verschiebe Seite {from_index + 1} nach HINTEN an Position {to_index + 1}"
+                    f"FALL 3: Verschiebe Seite {from_index + 1} nach HINTEN "
+                    f"an Position {to_index + 1}"
                 )
                 for i in range(total_pages):
                     if i == from_index:
-                        continue  # Überspringe, füge später ein
+                        continue
                     new_doc.insert_pdf(doc, from_page=i, to_page=i)
                     if i == to_index:
-                        # Jetzt die verschobene Seite einfügen
                         new_doc.insert_pdf(
                             doc, from_page=from_index, to_page=from_index
                         )
 
-            # Überprüfe die neue Seitenzahl
             new_total = len(new_doc)
             print(f"Neue PDF hat {new_total} Seiten (sollte {total_pages} sein)")
 
-            # Backup erstellen (nur wenn eingeschaltet)
-            backup_path = None
+            # Backup VOR der Änderung (nur wenn aktiviert)
             if self.create_backup:
-                backup_path = self.get_backup_filename(self.pdf_path)
                 try:
-                    # Backup erstellen
+                    backup_path = self.get_backup_filename(self.pdf_path)
                     shutil.copy2(self.pdf_path, backup_path)
                     print(f"Backup erstellt: {backup_path}")
                 except Exception as e:
@@ -59580,51 +62720,64 @@ class PDFViewer(QMainWindow):
             else:
                 print("Backup ist deaktiviert - keine Sicherungskopie erstellt")
 
-            # Temporäre Datei speichern
-            import tempfile
+            # Temp-Datei im selben Verzeichnis wie das Original
+            temp_dir_path = os.path.dirname(self.pdf_path)
+            fd, temp_path = tempfile.mkstemp(
+                suffix=".pdf", prefix="move_", dir=temp_dir_path
+            )
+            os.close(fd)
 
-            temp_dir = tempfile.gettempdir()
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
-            temp_path = os.path.join(temp_dir, f"temp_move_{timestamp}.pdf")
+            # Metadaten: Original übernehmen + persönlichen Eintrag ergänzen
+            copy_pdf_metadata(doc, new_doc)
+            apply_personal_metadata(
+                new_doc,
+                action_label="Drag & Drop",
+                password=_pw,
+            )
 
             print(f"Speichere unter: {temp_path}")
-            new_doc.save(temp_path, garbage=4, deflate=True)
+            if _pw:
+                new_doc.save(
+                    temp_path,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=_pw,
+                    owner_pw=_pw,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                    garbage=4,
+                    deflate=True,
+                )
+            else:
+                new_doc.save(temp_path, garbage=4, deflate=True)
             new_doc.close()
             doc.close()
 
-            # Dateigröße überprüfen
-            if os.path.exists(temp_path):
-                file_size = os.path.getsize(temp_path) / 1024
-                print(f"Temporäre Dateigröße: {file_size:.1f} KB")
-
-                # Backup erstellen
-                backup_path = self.pdf_path + f".backup_{timestamp}"
-                shutil.copy2(self.pdf_path, backup_path)
-                print(f"Backup erstellt: {backup_path}")
-
-                # Original ersetzen
-                shutil.move(temp_path, self.pdf_path)
-                print(f"PDF erfolgreich aktualisiert")
-
-                # Überprüfe ob die neue PDF korrekt ist
-                test_doc = fitz.open(self.pdf_path)
-                test_pages = len(test_doc)
-                test_doc.close()
-                print(f"Neue PDF hat {test_pages} Seiten")
-
-                if test_pages != total_pages:
-                    print(
-                        f"WARNUNG: Seitenzahl hat sich geändert! {total_pages} -> {test_pages}"
-                    )
-                    # Stelle das Backup wieder her
-                    shutil.copy2(backup_path, self.pdf_path)
-                    print("Backup wiederhergestellt")
-                    return False
-
-                return True
-            else:
+            # Verifikation
+            if not os.path.exists(temp_path) or os.path.getsize(temp_path) == 0:
                 print("FEHLER: Temporäre Datei wurde nicht erstellt")
                 return False
+
+            # Seitenzahl prüfen
+            test_doc = fitz.open(temp_path)
+            if _pw and (test_doc.is_encrypted or test_doc.needs_pass):
+                test_doc.authenticate(_pw)
+            test_pages = len(test_doc)
+            test_doc.close()
+
+            if test_pages != total_pages:
+                print(
+                    f"WARNUNG: Seitenzahl hat sich geändert! "
+                    f"{total_pages} -> {test_pages}"
+                )
+                try:
+                    os.remove(temp_path)
+                except Exception:
+                    pass
+                return False
+
+            # Original ersetzen
+            shutil.move(temp_path, self.pdf_path)
+            print("PDF erfolgreich aktualisiert")
+            return True
 
         except Exception as e:
             print(f"FEHLER in _perform_page_move: {e}")
@@ -59634,29 +62787,28 @@ class PDFViewer(QMainWindow):
             return False
 
     def _reload_pdf_after_move_with_speech(self):
-        """Lädt die PDF nach einer Verschiebung neu - MIT SPRACHAUSGABE"""
+        """Lädt die PDF nach einer Verschiebung neu - MIT SPRACHAUSGABE."""
         print("Lade PDF nach Verschiebung neu...")
 
-        # SPRACHAUSGABE VOR dem Neuladen (wichtig!)
         if self.last_page_move_info:
             old_page, new_pos = self.last_page_move_info
-            # Warte kurz, dann Ansage
-            # "Seite {0} an Position {1} eingefügt"
             QTimer.singleShot(
-                100, lambda: self.say(self.tr("drag_page_dropped", old_page, new_pos))
+                100,
+                lambda: self.say(
+                    self.tr("drag_page_dropped", old_page, new_pos)
+                ),
             )
 
         try:
-            # UNTERDRÜCKE die automatische "Seite 1" Ansage
             self.suppress_page_announcement = True
 
-            # PDF neu laden
-            self.load_pdf()
+            _pw = getattr(self, "current_password", None)
 
-            # Warte kurz und aktiviere Drag & Drop neu
+            # WICHTIG: Passwort durchreichen
+            self.load_pdf(self.pdf_path, password=_pw)
+
             QTimer.singleShot(500, self._reactivate_drag_mode_silent)
 
-            # Setze suppress Flag nach kurzer Zeit zurück
             QTimer.singleShot(
                 1000, lambda: setattr(self, "suppress_page_announcement", False)
             )
@@ -59700,8 +62852,10 @@ class PDFViewer(QMainWindow):
                 self.drag_original_pos = item.pos()
 
                 # SPRACHAUSGABE: Beim Greifen
-                # "Seite {0} greifen"
-                self.say(self.tr("drag_page_grab", item.page_number))
+                page_number = getattr(
+                    item, "page_number", getattr(item, "original_index", 0) + 1
+                )
+                self.say(self.tr("drag_page_grab", page_number))
 
                 event.accept()
             else:
@@ -59751,6 +62905,14 @@ class PDFViewer(QMainWindow):
             if self.drag_enabled:
                 item.setCursor(Qt.ArrowCursor)
             QGraphicsPixmapItem.hoverLeaveEvent(item, event)
+
+        # Original-Handler einmalig sichern, damit disable_drag_mode sie zurückgeben kann
+        if not hasattr(item, "_original_mouse_press"):
+            item._original_mouse_press = item.mousePressEvent
+            item._original_mouse_move = item.mouseMoveEvent
+            item._original_mouse_release = item.mouseReleaseEvent
+            item._original_hover_enter = item.hoverEnterEvent
+            item._original_hover_leave = item.hoverLeaveEvent
 
         # Event-Handler zuweisen
         item.mousePressEvent = mouse_press_event
@@ -60098,7 +63260,8 @@ class PDFViewer(QMainWindow):
             self._show_no_pdf_dialog()
             return
 
-        dialog = PDFMetadataDialog(self, self.pdf_path)
+        password = getattr(self, "current_password", None)
+        dialog = PDFMetadataDialog(self, self.pdf_path, password=password)
         dialog.exec_()
 
     def _manual_translations_update(self):
@@ -61809,7 +64972,7 @@ class PDFViewer(QMainWindow):
 
         try:
             current_mode = self.zoom_mode
-            backup_path = None
+            _pw = getattr(self, "current_password", None)
 
             # 1. Backup erstellen (nur wenn aktiv)
             if self.create_backup:
@@ -61818,7 +64981,7 @@ class PDFViewer(QMainWindow):
                 print(f"Backup vor Seitenlöschung erstellt: {backup_path}")
 
             # 2. Neue PDF ohne die gelöschte Seite erstellen
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path)
             total_pages = len(doc)
             if total_pages == 1:
                 doc.close()
@@ -61829,16 +64992,21 @@ class PDFViewer(QMainWindow):
             for i in range(total_pages):
                 if i != page_index:
                     new_doc.insert_pdf(doc, from_page=i, to_page=i)
+
+            # Metadaten: erst Original kopieren, dann persönliche ergänzen
+            copy_pdf_metadata(doc, new_doc)
+            apply_personal_metadata(
+                new_doc,
+                action_label=self.tr("filename_pages_deleted"),
+                password=_pw,
+            )
             doc.close()
 
-            # 3. Zielpfad bestimmen
+            # 3. Zielpfad bestimmen + speichern (mit Verschlüsselung)
             if self.create_backup:
-                # Backup aktiv: Original überschreiben
                 final_path = self.pdf_path
-                new_doc.save(final_path, garbage=4, deflate=True)
                 result_path = final_path
             else:
-                # Backup inaktiv: Neue Datei mit Suffix erstellen
                 base_clean = FilenameGenerator.clean_base_name(
                     os.path.splitext(os.path.basename(self.pdf_path))[0]
                 )
@@ -61855,20 +65023,34 @@ class PDFViewer(QMainWindow):
                 while os.path.exists(final_path):
                     final_path = f"{base}_{counter}{ext}"
                     counter += 1
-                new_doc.save(final_path, garbage=4, deflate=True)
                 result_path = final_path
 
+            # Verschlüsselt speichern, falls Original geschützt war
+            if _pw:
+                new_doc.save(
+                    final_path,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=_pw,
+                    owner_pw=_pw,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                    garbage=4,
+                    deflate=True,
+                )
+            else:
+                new_doc.save(final_path, garbage=4, deflate=True)
             new_doc.close()
 
-            # 4. PDF neu laden (die geänderte oder neue Datei)
+            # 4. PDF neu laden MIT Passwort
             self.pdf_path = result_path
-            self.load_pdf()
+            self.load_pdf(result_path, password=_pw)
             self.set_zoom_mode(current_mode)
             self.empty_pages = [p for p in self.empty_pages if p != page_index]
 
             # 5. Erfolgsmeldung
             if self.create_backup:
-                self.say(self.tr("page_deleted", page_index + 1), convert_numbers=True)
+                self.say(
+                    self.tr("page_deleted", page_index + 1), convert_numbers=True
+                )
                 myUniversalDialog(
                     self,
                     title=self.tr("success"),
@@ -61899,7 +65081,7 @@ class PDFViewer(QMainWindow):
                 )
                 dialog.exec_()
                 if dialog.result_value == "open":
-                    self.load_pdf(final_path)
+                    self.load_pdf(final_path, password=_pw)
 
         except Exception as e:
             myUniversalDialog(
@@ -61956,16 +65138,19 @@ class PDFViewer(QMainWindow):
 
         try:
             current_mode = self.zoom_mode
+            _pw = getattr(self, "current_password", None)
             empty_pages_sorted = sorted(self.empty_pages, reverse=True)
 
             # 1. Backup erstellen (nur wenn aktiv)
             if self.create_backup:
                 backup_path = self.get_backup_filename(self.pdf_path)
                 shutil.copy2(self.pdf_path, backup_path)
-                print(f"Backup vor Löschung leerer Seiten erstellt: {backup_path}")
+                print(
+                    f"Backup vor Löschung leerer Seiten erstellt: {backup_path}"
+                )
 
             # 2. Neue PDF ohne leere Seiten erstellen
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path)
             total_doc_pages = len(doc)
             if len(empty_pages_sorted) == total_doc_pages:
                 doc.close()
@@ -61976,12 +65161,19 @@ class PDFViewer(QMainWindow):
             for i in range(total_doc_pages):
                 if i not in empty_pages_sorted:
                     new_doc.insert_pdf(doc, from_page=i, to_page=i)
+
+            # Metadaten: erst Original kopieren, dann persönliche ergänzen
+            copy_pdf_metadata(doc, new_doc)
+            apply_personal_metadata(
+                new_doc,
+                action_label=self.tr("filename_pages_deleted"),
+                password=_pw,
+            )
             doc.close()
 
-            # 3. Zielpfad bestimmen
+            # 3. Zielpfad bestimmen + speichern (mit Verschlüsselung)
             if self.create_backup:
                 final_path = self.pdf_path
-                new_doc.save(final_path, garbage=4, deflate=True)
                 result_path = final_path
             else:
                 base_clean = FilenameGenerator.clean_base_name(
@@ -62000,21 +65192,33 @@ class PDFViewer(QMainWindow):
                 while os.path.exists(final_path):
                     final_path = f"{base}_{counter}{ext}"
                     counter += 1
-                new_doc.save(final_path, garbage=4, deflate=True)
                 result_path = final_path
 
+            if _pw:
+                new_doc.save(
+                    final_path,
+                    encryption=fitz.PDF_ENCRYPT_AES_256,
+                    user_pw=_pw,
+                    owner_pw=_pw,
+                    permissions=fitz.PDF_PERM_PRINT | fitz.PDF_PERM_COPY,
+                    garbage=4,
+                    deflate=True,
+                )
+            else:
+                new_doc.save(final_path, garbage=4, deflate=True)
             new_doc.close()
 
-            # 4. PDF neu laden
+            # 4. PDF neu laden MIT Passwort
             self.pdf_path = result_path
-            self.load_pdf()
+            self.load_pdf(result_path, password=_pw)
             self.set_zoom_mode(current_mode)
             self.empty_pages = []
 
             # 5. Erfolgsmeldung
             if self.create_backup:
                 self.say(
-                    self.tr("empty_pages_deleted", empty_count), convert_numbers=True
+                    self.tr("empty_pages_deleted", empty_count),
+                    convert_numbers=True,
                 )
                 myUniversalDialog(
                     self,
@@ -62041,12 +65245,14 @@ class PDFViewer(QMainWindow):
                         (self.tr("btn_close"), "primary", "close"),
                     ],
                     icon_type="",
-                    voice_message=self.tr("empty_pages_deleted_voice", empty_count),
+                    voice_message=self.tr(
+                        "empty_pages_deleted_voice", empty_count
+                    ),
                     text_alignment=Qt.AlignLeft,
                 )
                 dialog.exec_()
                 if dialog.result_value == "open":
-                    self.load_pdf(final_path)
+                    self.load_pdf(final_path, password=_pw)
 
         except Exception as e:
             myUniversalDialog(
@@ -62123,297 +65329,213 @@ class PDFViewer(QMainWindow):
 
     ###------------------------------------------
 
-    ### ohne save as Dialog
-    def export_current_page_auto(self):
-        """Exportiert die aktuell angeklickte Seite automatisch mit Dateinamen"""
-        if not hasattr(self, "context_page") or self.context_page is None:
-            return
+    def _warn_no_export_pages(self):
+        """Info-Dialog, wenn keine Seiten markiert sind."""
+        self.say(self.tr("no_export_pages"))
+        dialog = myUniversalDialog(
+            self,
+            title=self.tr("info"),
+            message=self.tr("no_export_pages"),
+            buttons=[(self.tr("btn_ok"), "primary", "ok")],
+            icon_type="",
+            voice_message="",
+            text_alignment=Qt.AlignLeft,
+        )
+        dialog.exec_()
 
-        page_index = self.context_page
+    def _confirm_overwrite(self, save_path):
+        """True = überschreiben, False = abbrechen. Fragt nur, wenn Datei existiert."""
+        if not os.path.exists(save_path):
+            return True
+        dialog = myUniversalDialog(
+            self,
+            title=self.tr("overwrite_title"),
+            message=self.tr("overwrite_question", save_path),
+            text_alignment=Qt.AlignLeft,
+            buttons=[
+                (self.tr("confirm_yes"), "danger", "yes"),
+                (self.tr("confirm_no"), "dark", "no"),
+            ],
+            icon_type="",
+            default_button="no",
+            voice_message=self.tr("overwrite_voice"),
+        )
+        dialog.exec_()
+        return getattr(dialog, "result_value", "no") == "yes"
+
+    def _build_pages_suffix(self, pages):
+        """Dateinamen-Suffix für 1..n Seiten (Seite_N, Seiten_A-B, Seiten_A_B_C)."""
+        page_numbers = [p + 1 for p in sorted(pages)]
+        if len(page_numbers) == 1:
+            return self.tr("filename_page_single") + str(page_numbers[0])
+        is_continuous = all(
+            page_numbers[i + 1] == page_numbers[i] + 1
+            for i in range(len(page_numbers) - 1)
+        )
+        if is_continuous:
+            return self.tr("filename_page_range") + f"{page_numbers[0]}-{page_numbers[-1]}"
+        pages_str = "_".join(str(p) for p in page_numbers)
+        return self.tr("filename_export_multiple").format(pages_str)
+
+    def _export_pages_to(self, pages, save_path, suffix=None):
+        """Kernlogik: Seiten exportieren, Metadaten setzen, speichern.
+        Gibt True bei Erfolg zurück. doc/new_doc werden immer geschlossen."""
+        doc = None
+        new_doc = None
         try:
-            doc = fitz.open(self.pdf_path)
+            doc = self._open_pdf(self.pdf_path) # mit PW Behandlung
             new_doc = fitz.open()
-            new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
+            for page_index in sorted(pages):
+                new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
 
-            # Suffix für die Seite generieren (übersetzt, z.B. "_Seite_1")
-            suffix = self.tr("filename_page_single") + str(page_index + 1)
-            save_path = self.generate_custom_filename(
-                suffixes=[suffix], force_new_file=True
+            # Metadaten: Quelle übernehmen + Aktion markieren
+            copy_pdf_metadata(doc, new_doc)
+            if suffix is None:
+                suffix = self._build_pages_suffix(pages)
+            apply_personal_metadata(new_doc, action_label=suffix,
+                password=getattr(self, "current_password", None)
             )
 
-            # Falls Datei schon existiert -> Überschreib-Dialog
-            if os.path.exists(save_path):
-                dialog = myUniversalDialog(
-                    self,
-                    title=self.tr("overwrite_title"),
-                    message=self.tr("overwrite_question", save_path),
-                    text_alignment=Qt.AlignLeft,
-                    buttons=[
-                        (self.tr("confirm_yes"), "danger", "yes"),
-                        (self.tr("confirm_no"), "dark", "no"),
-                    ],
-                    icon_type="",
-                    default_button="no",
-                    voice_message=self.tr("overwrite_voice"),
-                )
-                dialog.exec_()
-
-                if dialog.result_value != "yes":
-                    self.say(self.tr("export_cancelled"))
-                    doc.close()
-                    new_doc.close()
-                    return
-
-            # Datei speichern
             new_doc.save(save_path)
-            self.say(self.tr("page_exported", page_index + 1, save_path))
-
-            doc.close()
-            new_doc.close()
-
+            return True
         except Exception as e:
             QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('export_error')}: {str(e)}"
+                self, self.tr("error"), f"{self.tr('export_error')}: {e}"
             )
+            return False
+        finally:
+            if new_doc is not None:
+                try: new_doc.close()
+                except Exception: pass
+            if doc is not None:
+                try: doc.close()
+                except Exception: pass
 
-    ### mit save as Dialog
-    def export_current_page(self):
-        """Exportiert die aktuell angeklickte Seite in eine neue PDF mit Speichern unter"""
+    # ### ohne save as Dialog
+    def export_current_page_auto(self):
+        """Einzelne Seite ohne Dialog."""
         if not hasattr(self, "context_page") or self.context_page is None:
             return
-
         page_index = self.context_page
-        try:
-            doc = fitz.open(self.pdf_path)
-            new_doc = fitz.open()
-            new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-
-            save_path, _ = QFileDialog.getSaveFileName(
-                self,
-                # "Seite exportieren"
-                self.tr("export_page_title"),
-                f"Seite_{page_index+1}.pdf",
-                "PDF Dateien (*.pdf)",
+        suffix = self.tr("filename_page_single") + str(page_index + 1)
+        save_path = self.generate_custom_filename(
+            suffixes=[suffix], force_new_file=True
+        )
+        if not self._confirm_overwrite(save_path):
+            self.say(self.tr("export_cancelled"))
+            return
+        if self._export_pages_to([page_index], save_path, suffix=suffix):
+            self.say(
+                self.tr("page_exported", page_index + 1, save_path),
+                convert_numbers=True,
             )
-            if save_path:
-                new_doc.save(save_path)
-                # "Seite {0} exportiert nach {1}"
-                self.say(self.tr("page_exported", page_index + 1, save_path))
 
-            doc.close()
-            new_doc.close()
-        except Exception as e:
-            QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('export_error')}: {str(e)}"
+    # ### mit save as Dialog
+    def export_current_page(self):
+        """Einzelne Seite mit Speichern-unter-Dialog."""
+        if not hasattr(self, "context_page") or self.context_page is None:
+            return
+        save_path, _ = QFileDialog.getSaveFileName(
+            self, self.tr("export_page_title"),
+            f"Seite_{self.context_page + 1}.pdf",
+            "PDF Dateien (*.pdf)",
+        )
+        if not save_path:
+            return
+        if self._export_pages_to([self.context_page], save_path):
+            self.say(
+                self.tr("page_exported", self.context_page + 1, save_path),
+                convert_numbers=True,
             )
 
     ###---------------------------------
 
-    def export_marked_pages_auto(self):
-        """Exportiert alle für Export markierten Seiten automatisch in eine neue PDF."""
-        if not self.export_pages:
-            self.say(self.tr("no_export_pages"))
-            dialog = myUniversalDialog(
-                self,
-                title=self.tr("info"),
-                message=self.tr("no_export_pages"),
-                buttons=[(self.tr("btn_ok"), "primary", "ok")],
-                icon_type="",
-                voice_message="",
-                text_alignment=Qt.AlignLeft,
-            )
-            dialog.exec_()
-            return
-
-        try:
-            doc = fitz.open(self.pdf_path)
-            new_doc = fitz.open()
-            pages = sorted(self.export_pages)
-            page_numbers = [p + 1 for p in pages]
-            is_continuous = all(
-                page_numbers[i + 1] == page_numbers[i] + 1
-                for i in range(len(page_numbers) - 1)
-            )
-
-            for page_index in pages:
-                new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-
-            base_name = os.path.splitext(os.path.basename(self.pdf_path))[0]
-
-            if len(pages) == 1:
-                suffix = self.tr("filename_page_single") + str(page_numbers[0])
-            elif is_continuous:
-                suffix = (
-                    self.tr("filename_page_range")
-                    + f"{page_numbers[0]}-{page_numbers[-1]}"
-                )
-            else:
-                pages_str = "_".join(str(p) for p in page_numbers)
-                suffix = self.tr("filename_export_multiple").format(pages_str)
-
-            save_path = self.generate_custom_filename(
-                base_name=base_name, suffixes=[suffix], force_new_file=True
-            )
-
-            if os.path.exists(save_path):
-                dialog = myUniversalDialog(
-                    self,
-                    title=self.tr("overwrite_title"),
-                    message=self.tr("overwrite_question", save_path),
-                    text_alignment=Qt.AlignLeft,
-                    buttons=[
-                        (self.tr("confirm_yes"), "danger", "yes"),
-                        (self.tr("confirm_no"), "dark", "no"),
-                    ],
-                    icon_type="",
-                    default_button="no",
-                    voice_message=self.tr("overwrite_voice"),
-                )
-                dialog.exec_()
-                if not (
-                    hasattr(dialog, "result_value") and dialog.result_value == "yes"
-                ):
-                    self.say(self.tr("export_cancelled"))
-                    doc.close()
-                    new_doc.close()
-                    return
-
-            new_doc.save(save_path)
-            self.say(
-                self.tr("pages_exported", len(pages), os.path.basename(save_path)),
-                convert_numbers=True,
-            )
-            success_dialog = myUniversalDialog(
-                self,
-                title=self.tr("success"),
-                message=self.tr(
-                    "pages_exported", len(pages), os.path.basename(save_path)
-                ),
-                buttons=[(self.tr("btn_ok"), "success", "ok")],
-                icon_type="",
-                voice_message="",
-                text_alignment=Qt.AlignLeft,
-            )
-            success_dialog.exec_()
-            doc.close()
-            new_doc.close()
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('error_occurred')}: {str(e)}"
-            )
-
-    def export_marked_pages_auto_split(self):
-        """Exportiert alle markierten Seiten als einzelne PDF-Dateien."""
-        if not self.export_pages:
-            self.say(self.tr("no_export_pages"))
-            dialog = myUniversalDialog(
-                self,
-                title=self.tr("info"),
-                message=self.tr("no_export_pages"),
-                buttons=[(self.tr("btn_ok"), "primary", "ok")],
-                icon_type="",
-                voice_message="",
-                text_alignment=Qt.AlignLeft,
-            )
-            dialog.exec_()
-            return
-
-        try:
-            doc = fitz.open(self.pdf_path)
-            base_name = os.path.splitext(os.path.basename(self.pdf_path))[0]
-            exported_files = []
-            skipped_files = []
-
-            for page_index in sorted(self.export_pages):
-                new_doc = fitz.open()
-                new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-
-                suffix = self.tr("filename_page_single") + str(page_index + 1)
-                save_path = self.generate_custom_filename(
-                    base_name=base_name, suffixes=[suffix], force_new_file=True
-                )
-
-                if os.path.exists(save_path):
-                    dialog = myUniversalDialog(
-                        self,
-                        title=self.tr("overwrite_title"),
-                        message=self.tr("overwrite_question", save_path),
-                        text_alignment=Qt.AlignLeft,
-                        buttons=[
-                            (self.tr("confirm_yes"), "danger", "yes"),
-                            (self.tr("confirm_no"), "dark", "no"),
-                        ],
-                        icon_type="",
-                        default_button="no",
-                        voice_message=self.tr("overwrite_voice"),
-                    )
-                    dialog.exec_()
-                    if hasattr(dialog, "result_value") and dialog.result_value == "yes":
-                        new_doc.save(save_path)
-                        exported_files.append(page_index + 1)
-                    else:
-                        skipped_files.append(page_index + 1)
-                        self.say(
-                            self.tr("page_skipped", page_index + 1),
-                            convert_numbers=True,
-                        )
-                else:
-                    new_doc.save(save_path)
-                    exported_files.append(page_index + 1)
-                new_doc.close()
-
-            doc.close()
-            if exported_files:
-                success_message = self.tr("pages_exported_split", len(exported_files))
-                if skipped_files:
-                    success_message += "\n\n" + self.tr(
-                        "pages_skipped", len(skipped_files)
-                    )
-                self.say(success_message, convert_numbers=True)
-                success_dialog = myUniversalDialog(
-                    self,
-                    title=self.tr("success"),
-                    message=success_message,
-                    buttons=[(self.tr("btn_ok"), "success", "ok")],
-                    icon_type="",
-                    voice_message="",
-                    text_alignment=Qt.AlignLeft,
-                )
-                success_dialog.exec_()
-            else:
-                self.say(self.tr("no_pages_exported"))
-
-        except Exception as e:
-            QMessageBox.critical(
-                self, self.tr("error"), f"{self.tr('error_occurred')}: {str(e)}"
-            )
-
     def export_marked_pages(self):
-        """Exportiert alle für Export markierten Seiten mit Save-As-Dialog."""
+        """Markierte Seiten in eine PDF, mit Speichern-unter-Dialog."""
         if not self.export_pages:
             self.say(self.tr("no_export_pages"))
             return
         save_path, _ = QFileDialog.getSaveFileName(
-            self,
-            self.tr("export_marked_title"),
+            self, self.tr("export_marked_title"),
             "Exportierte_Seiten.pdf",
             "PDF Dateien (*.pdf)",
         )
-        if save_path:
-            try:
-                doc = fitz.open(self.pdf_path)
-                new_doc = fitz.open()
-                for page_index in sorted(self.export_pages):
-                    new_doc.insert_pdf(doc, from_page=page_index, to_page=page_index)
-                new_doc.save(save_path)
-                self.say(self.tr("pages_exported", len(self.export_pages), save_path))
-                doc.close()
-                new_doc.close()
-            except Exception as e:
-                QMessageBox.critical(
-                    self, self.tr("error"), f"{self.tr('export_error')}: {str(e)}"
-                )
+        if not save_path:
+            return
+        if self._export_pages_to(self.export_pages, save_path):
+            self.say(
+                self.tr("pages_exported", len(self.export_pages), os.path.basename(save_path)),
+                convert_numbers=True,
+            )
+
+    def export_marked_pages_auto(self):
+        """Markierte Seiten in eine PDF, ohne Dialog."""
+        if not self.export_pages:
+            self._warn_no_export_pages()
+            return
+        pages = sorted(self.export_pages)
+        suffix = self._build_pages_suffix(pages)
+        base_name = os.path.splitext(os.path.basename(self.pdf_path))[0]
+        save_path = self.generate_custom_filename(
+            base_name=base_name, suffixes=[suffix], force_new_file=True
+        )
+        if not self._confirm_overwrite(save_path):
+            self.say(self.tr("export_cancelled"))
+            return
+        if not self._export_pages_to(pages, save_path, suffix=suffix):
+            return
+
+        msg = self.tr("pages_exported", len(pages), os.path.basename(save_path))
+        self.say(msg, convert_numbers=True)
+        success_dialog = myUniversalDialog(
+            self,
+            title=self.tr("success"),
+            message=msg,
+            buttons=[(self.tr("btn_ok"), "success", "ok")],
+            icon_type="",
+            voice_message="",
+            text_alignment=Qt.AlignLeft,
+        )
+        success_dialog.exec_()
+
+    def export_marked_pages_auto_split(self):
+        """Markierte Seiten als einzelne PDFs."""
+        if not self.export_pages:
+            self._warn_no_export_pages()
+            return
+        base_name = os.path.splitext(os.path.basename(self.pdf_path))[0]
+        exported, skipped = [], []
+
+        for page_index in sorted(self.export_pages):
+            suffix = self.tr("filename_page_single") + str(page_index + 1)
+            save_path = self.generate_custom_filename(
+                base_name=base_name, suffixes=[suffix], force_new_file=True
+            )
+            if not self._confirm_overwrite(save_path):
+                skipped.append(page_index + 1)
+                self.say(self.tr("page_skipped", page_index + 1), convert_numbers=True)
+                continue
+            if self._export_pages_to([page_index], save_path, suffix=suffix):
+                exported.append(page_index + 1)
+
+        if not exported:
+            self.say(self.tr("no_pages_exported"))
+            return
+
+        msg = self.tr("pages_exported_split", len(exported))
+        if skipped:
+            msg += "\n\n" + self.tr("pages_skipped", len(skipped))
+        self.say(msg, convert_numbers=True)
+        success_dialog = myUniversalDialog(
+            self,
+            title=self.tr("success"),
+            message=msg,
+            buttons=[(self.tr("btn_ok"), "success", "ok")],
+            icon_type="",
+            voice_message="",
+            text_alignment=Qt.AlignLeft,
+        )
+        success_dialog.exec_()
 
 
 # === ATEXIT (Aufräumfunktion) ===
