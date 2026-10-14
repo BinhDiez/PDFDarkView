@@ -207,11 +207,26 @@ from PyQt5.QtGui import (
 ### AKTUELLE PROGRAMM-VERSION
 ### = GitHub‑Release‑Tag (ohne führendes 'v')
 ### ====================================================
-APP_VERSION = "2.6.1"
+APP_VERSION = "2.6.2"
 
 # ACHTUNG: nur als PW geschütztes ZIP auf GitHub hochladen
 
 """ Changelog:
+
+
+    2.6.2
+
+        ✨ Neu
+
+        · Kein Backup wenn Quelldatei nach dem Speichern löschen ausgewählt wurde.
+        · Trennzeichen: "" wurde in den Dateinamens-Einstellungen entfernt um die Verwendung von Suffixen immer sicherzustellen.
+
+
+        ⚠️ Hinweise für Anwender
+
+        · Die Option „Quelldatei nach dem Speichern löschen" ignoriert jetzt die Backup-Einstellung.
+        So dass es zu keiner Dateivermehrung im Verzeichnis kommt.
+        Bei destruktiven Änderungen werden weiterhin Backups erzeugt, wenn Backup aktiviert ist.
 
 
     2.6.1
