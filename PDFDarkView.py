@@ -214,6 +214,7 @@ APP_VERSION = "2.6.2"
 """ Changelog:
 
 
+
     2.6.2
 
         ✨ Neu
@@ -52513,9 +52514,10 @@ class PDFViewer(QMainWindow):
         Sprache und speichert sie in QSettings unter
         'filename/known_action_suffixes'.
 
-        Wird beim App-Start und einmal nach jedem Speichern aufgerufen.
-        Dadurch kennt der Parser auch Suffixe aus früheren Sitzungen
-        und anderen Sprachen und kann sie zuverlässig entfernen.
+        WICHTIG: Diese Methode ruft NICHT self.tr() auf, sondern greift
+        direkt auf das Wörterbuch zu. Dadurch entstehen keine Debug-
+        Meldungen für Keys, die in manchen Sprachen nicht gepflegt sind.
+        Wir nehmen, was da ist – fehlende Keys werden still ignoriert.
         """
         suffix_keys = [
             "filename_with_signature",
@@ -52531,6 +52533,13 @@ class PDFViewer(QMainWindow):
             "filename_page_moved", "filename_page_deleted",
         ]
 
+        lang = getattr(self, "lang", None)
+        if lang is None:
+            return
+
+        current_dict = lang.available.get(lang.current_lang, {}).get("dict", {})
+        fallback_dict = lang.available.get("de", {}).get("dict", {})
+
         settings = QSettings("BinhDiez", "PDFDarkView")
         existing = settings.value("filename/known_action_suffixes", [], type=list)
         if not isinstance(existing, list):
@@ -52538,13 +52547,12 @@ class PDFViewer(QMainWindow):
 
         added = 0
         for key in suffix_keys:
-            try:
-                val = self.tr(key)
-            except Exception:
-                continue
+            # Silent lookup: erst aktuelle Sprache, dann Deutsch, sonst
+            # überspringen – ohne tr(), ohne Debug-Meldung.
+            val = current_dict.get(key)
+            if not val and lang.current_lang != "de":
+                val = fallback_dict.get(key)
             if not val or not isinstance(val, str):
-                continue
-            if val.startswith("DEBUG") or val == key:
                 continue
             if val not in existing:
                 existing.append(val)
@@ -52555,8 +52563,10 @@ class PDFViewer(QMainWindow):
                 existing = existing[-300:]
             settings.setValue("filename/known_action_suffixes", existing)
             settings.sync()
-            print(f"[PersistSuffixes] {added} neue Suffixe gespeichert, "
-                f"gesamt={len(existing)}")
+            print(
+                f"[PersistSuffixes] {added} neue Suffixe gespeichert, "
+                f"gesamt={len(existing)}"
+            )
 
     ### Option im Dateinamen Dialog:
     ### Quelldatei nach erfolgreichem Speichern löschen
