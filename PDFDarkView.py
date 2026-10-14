@@ -221,8 +221,9 @@ APP_VERSION = "2.6.1"
 
         · Neue Option „Quelldatei nach dem Speichern löschen" im Dateinamen-Einstellungsdialog.
         · Ist die Option aktiv, wird nach erfolgreichem Speichern unter neuem Namen die zuvor geöffnete Ausgangsdatei automatisch entfernt.
-        · Dadurch bleibt – bei deaktiviertem Backup – immer nur die aktuellste Version im Ordner liegen.
-        · Betrifft alle Speichervorgänge, die eine neue Datei mit Suffix erzeugen (Signaturen, Texte/Kreuze, Bilder, Formen, Redactions, Seitenoperationen usw.).
+        · Dadurch bleibt immer nur die aktuellste Version im Ordner liegen.
+          Ein Backup wird in diesem Fall NIE erstellt. (auch nicht wenn Backup aktiviert ist)
+        · Betrifft alle Speichervorgänge, die eine neue Datei mit Suffix erzeugen (Signaturen, Texte/Kreuze, Bilder, Formen, Redactions, Seitenoperationen, ocr usw.).
         · Der Selbstlöschungs-Fall (Quelldatei == Zieldatei, z. B. im Overwrite-Modus) wird abgefangen und führt zu keiner Löschung.
         · Bei Speichern unter, Schützen und Export wird die Quelldatei bewusst nicht gelöscht.
 
@@ -279,9 +280,10 @@ APP_VERSION = "2.6.1"
 
         ⚠️ Hinweise für Anwender
 
-        · Die Option „Quelldatei nach dem Speichern löschen" sollte nur in Kombination mit deaktiviertem Backup verwendet werden. Sonst entsteht bei jedem Speichervorgang zusätzlich eine Backup-Datei, was dem Ziel der Bereinigung widerspricht.
-        · Die Option „Namen aus vorheriger Datei übernehmen" funktioniert nur zuverlässig, wenn der Separator nicht auf „kein Trennzeichen" gesetzt ist.
-        · Bei erstmaliger Nutzung der Akkumulations-Funktion werden noch keine Vorgängernamen erkannt – die Liste filename/known_usernames füllt sich ab der ersten Speicherung mit aktivierter Option.
+        · Die Option „Quelldatei nach dem Speichern löschen" ignoriet die Backup
+          Einstellung um eine Dateivermehrung im Pfad zu verhindern, was das    eigentliche Ziel dieser OPtion ist.
+
+          Bei erstmaliger Nutzung der Akkumulations-Funktion werden noch keine Vorgängernamen erkannt – die Liste filename/known_usernames füllt sich ab der ersten Speicherung mit aktivierter Option.
 
         ✅ Kompatibilität
 
@@ -726,34 +728,87 @@ def _speak_message(message, lang_code, rate=175, engine_holder=None):
         except FileNotFoundError:
             print("[say] 'say'-Befehl nicht gefunden")
     else:
-        # Windows / Linux
+        # Windows / Linux – Registry-frei, Citrix-tauglich
         try:
             import pyttsx3
             engine = pyttsx3.init()
             engine.setProperty("rate", rate)
+
+            # Sprachkürzel bestimmen (z. B. "de", "vi", "ar")
+            lang_prefix = (lang_code or "").lower().split("_")[0]
+
+            chosen_voice_id = None
             try:
                 voices = engine.getProperty("voices") or []
-                prefix = lang_code.lower().split("_")[0]
-                chosen = None
+
+                # --- 1. Exakter Sprach-Match in ID oder Name ---
                 for v in voices:
-                    langs = getattr(v, "languages", []) or []
-                    ids = getattr(v, "id", "") or ""
-                    name = getattr(v, "name", "") or ""
-                    blob = " ".join([
-                        str(ids), str(name),
-                        " ".join(
-                            l.decode("utf-8", errors="ignore")
-                            if isinstance(l, (bytes, bytearray)) else str(l)
-                            for l in langs
-                        ),
-                    ]).lower()
-                    if prefix in blob:
-                        chosen = v.id
+                    blob = f"{v.id} {v.name}".lower()
+                    # Windows-IDs enthalten "de-de", "vi-vn", "ar-sa" etc.
+                    # oder "german", "vietnamese" in name
+                    if (
+                        f"_{lang_prefix}-" in blob
+                        or f"-{lang_prefix}-" in blob
+                        or f"_{lang_prefix}_" in blob
+                        or f"\\{lang_prefix}-" in blob
+                        or f" {lang_prefix}-" in blob
+                    ):
+                        chosen_voice_id = v.id
+                        print(f"[say] Windows-Stimme (Match): {v.name}")
                         break
-                if chosen:
-                    engine.setProperty("voice", chosen)
+
+                # --- 2. Fallback: Name enthält Sprachnamen ---
+                if not chosen_voice_id:
+                    _LANG_NAMES = {
+                        "de": ["german", "deutsch", "hedda", "katja", "stefan"],
+                        "en": ["english", "david", "zira", "mark", "hazel"],
+                        "vi": ["vietnam", "an"],
+                        "ar": ["arab", "hoda", "naayf"],
+                        "es": ["spanish", "espanol", "helena", "sabina"],
+                        "fr": ["french", "hortense", "julie", "paul"],
+                        "it": ["italian", "elsa", "cosimo"],
+                        "pt": ["portug", "helia", "maria"],
+                        "ru": ["russian", "irina", "pavel"],
+                        "zh": ["chinese", "huihui", "yaoyao"],
+                        "ja": ["japanese", "haruka", "ayumi"],
+                        "ko": ["korean", "heami"],
+                        "nl": ["dutch", "hanna"],
+                        "pl": ["polish", "paulina"],
+                        "tr": ["turkish", "tolga"],
+                        "cs": ["czech", "zuzana"],
+                        "hu": ["hungar", "szabolcs"],
+                        "ro": ["romanian", "andrei"],
+                        "el": ["greek", "stefanos"],
+                        "he": ["hebrew", "asaf"],
+                        "hi": ["hindi", "kalpana"],
+                        "th": ["thai", "pattara"],
+                    }
+                    hints = _LANG_NAMES.get(lang_prefix, [])
+                    for v in voices:
+                        blob = f"{v.id} {v.name}".lower()
+                        if any(h in blob for h in hints):
+                            chosen_voice_id = v.id
+                            print(f"[say] Windows-Stimme (Name-Match): {v.name}")
+                            break
+
+                # --- 3. Gar nichts gefunden: Default benutzen ---
+                if not chosen_voice_id:
+                    print(
+                        f"[say] Keine Windows-Stimme für '{lang_prefix}' gefunden. "
+                        f"Verfügbar: {[v.name for v in voices]}"
+                    )
             except Exception as e:
                 print(f"[say] pyttsx3 Stimmenwahl: {e}")
+
+            # WICHTIG: Nur setzen, wenn eine Stimme gefunden wurde –
+            # damit werfen wir keine Exception, wenn Citrix die Stimme
+            # nicht laden kann.
+            if chosen_voice_id:
+                try:
+                    engine.setProperty("voice", chosen_voice_id)
+                except Exception as e:
+                    print(f"[say] Stimme konnte nicht gesetzt werden: {e}")
+
             engine.say(message)
             engine.runAndWait()
         except Exception as e:
@@ -2839,24 +2894,17 @@ class FilenameSettingsDialog(QDialog):
         self.sep_space = QRadioButton(
             self.parent.tr("filename_separator_space")
         )
-        self.sep_none = QRadioButton(
-            self.parent.tr("filename_separator_none")
-        )
 
-        if self.separator == "_":
-            self.sep_underscore.setChecked(True)
-        elif self.separator == " ":
+        if self.separator == " ":
             self.sep_space.setChecked(True)
         else:
-            self.sep_none.setChecked(True)
+            self.sep_underscore.setChecked(True)
 
         self.sep_underscore.toggled.connect(self.update_preview)
         self.sep_space.toggled.connect(self.update_preview)
-        self.sep_none.toggled.connect(self.update_preview)
 
         sep_layout.addWidget(self.sep_underscore)
         sep_layout.addWidget(self.sep_space)
-        sep_layout.addWidget(self.sep_none)
 
         self.sep_group.setLayout(sep_layout)
 
@@ -3030,6 +3078,9 @@ class FilenameSettingsDialog(QDialog):
             "filename/timestamp_position", "after", type=str
         )
         self.separator = self.settings.value("filename/separator", "_", type=str)
+        # Migration: alte Konfigurationen mit "" oder anderen Werten → "_"
+        if self.separator not in ("_", " "):
+            self.separator = "_"
 
         # NEU: Benutzername in Suffixen verwenden
         self.use_username_in_suffix = self.settings.value(
@@ -3187,11 +3238,7 @@ class FilenameSettingsDialog(QDialog):
         use_ts = self.use_ts_cb.isChecked()
         fmt = self.ts_format_combo.currentData() if use_ts else ""
         ts_pos = self.ts_pos_combo.currentData()
-        separator = (
-            "_"
-            if self.sep_underscore.isChecked()
-            else " " if self.sep_space.isChecked() else ""
-        )
+        separator = "_" if self.sep_underscore.isChecked() else " "
 
         use_username = self.use_username_cb.isChecked()
         username = self.username_input.text().strip() if use_username else ""
@@ -3306,12 +3353,10 @@ class FilenameSettingsDialog(QDialog):
         self.settings.setValue(
             "filename/timestamp_position", self.ts_pos_combo.currentData()
         )
-        if self.sep_underscore.isChecked():
-            self.settings.setValue("filename/separator", "_")
-        elif self.sep_space.isChecked():
-            self.settings.setValue("filename/separator", " ")
-        else:
-            self.settings.setValue("filename/separator", "")
+        self.settings.setValue(
+            "filename/separator",
+            "_" if self.sep_underscore.isChecked() else " ",
+        )
 
         # NEU: Benutzername in Suffixen speichern
         use_username = self.use_username_cb.isChecked()
@@ -3510,6 +3555,9 @@ class FilenameGenerator:
             "filename/timestamp_position", "after", type=str
         )
         separator = settings.value("filename/separator", "_", type=str)
+        # Nur "_" und " " sind gültig – alles andere wird zu "_"
+        if separator not in ("_", " "):
+            separator = "_"
 
         use_username = settings.value(
             "filename/use_username_in_suffix", False, type=bool
@@ -3688,14 +3736,12 @@ class FilenameGenerator:
             out_parts.append(timestamp_str)
 
         # -------- Zusammenfügen --------
-        if separator == "_":
-            filename = "_".join(out_parts)
-            filename = re.sub(r"_+", "_", filename)
-        elif separator == " ":
+        if separator == " ":
             filename = " ".join(out_parts)
             filename = re.sub(r" +", " ", filename)
         else:
-            filename = "".join(out_parts)
+            filename = "_".join(out_parts)
+            filename = re.sub(r"_+", "_", filename)
 
         # -------- known_usernames aktualisieren --------
         if use_username and username:
@@ -4074,13 +4120,11 @@ class FilenameGenerator:
         """
         if not text:
             return text
-        if separator == "_":
-            return re.sub(r"[\s_]+", "_", text).strip("_")
-        elif separator == " ":
+        if separator == " ":
             return re.sub(r"[\s_]+", " ", text).strip()
-        else:
-            return re.sub(r"[\s_]+", "", text)
-
+        # Fallback und Underscore identisch behandeln – alte Configs
+        # mit "" oder anderem Wert werden so automatisch zu "_"
+        return re.sub(r"[\s_]+", "_", text).strip("_")
 
 ### ===================================
 ### PASSWÖRTER
@@ -44341,6 +44385,17 @@ class PDFViewer(QMainWindow):
             print("Backup ist deaktiviert - überspringe Backup-Erstellung")
             return None
 
+        # Zusätzliches Sicherheitsnetz: Delete-Source gewinnt immer
+        try:
+            settings = QSettings("BinhDiez", "PDFDarkView")
+            if settings.value(
+                "filename/delete_source_after_save", False, type=bool
+            ):
+                print("Backup übersprungen – Quelldatei wird gelöscht")
+                return None
+        except Exception:
+            pass
+
         try:
             backup_path = self.get_backup_filename(original_pdf_path)
 
@@ -52492,38 +52547,88 @@ class PDFViewer(QMainWindow):
     ### Quelldatei nach erfolgreichem Speichern löschen
     def _finalize_save_delete_source(self, new_file_path):
         """
-        Löscht die Quelldatei (self.pdf_path) nach erfolgreichem Speichern,
-        wenn die Option 'filename/delete_source_after_save' aktiv ist.
-        Sicherheitsprüfungen verhindern versehentliches Löschen.
+        Wird nach jedem erfolgreichen Speichern unter neuem Namen aufgerufen.
+
+        Aufgaben:
+        1) self.pdf_path sofort auf die neue Datei umstellen. Ohne diesen
+           Schritt greift jede Aktion im Zeitfenster bis zum verzögerten
+           Reload (QTimer.singleShot ~2500ms) auf die bereits gelöschte
+           Quelldatei zu und stürzt mit FileNotFoundError ab.
+        2) Backup temporär deaktivieren, damit während der Löschoperation
+           kein Backup der zu löschenden Datei angelegt wird.
+        3) Quelldatei löschen (nur wenn Option aktiv).
+        4) Vorherigen Backup-Zustand wiederherstellen.
+
+        Fehler werden geloggt, aber nie weitergereicht – die Methode
+        kann einen Speichervorgang nicht abbrechen.
         """
+
+        def _set_backup_state(active):
+            """Backup-Zustand setzen und die Menü-Action synchronisieren."""
+            self.create_backup = bool(active)
+            action = getattr(self, "backup_action", None)
+            if action is None:
+                return
+            try:
+                action.blockSignals(True)
+                action.setChecked(bool(active))
+            except Exception:
+                pass
+            finally:
+                try:
+                    action.blockSignals(False)
+                except Exception:
+                    pass
+
         try:
             settings = QSettings("BinhDiez", "PDFDarkView")
-            if not settings.value(
+            delete_enabled = settings.value(
                 "filename/delete_source_after_save", False, type=bool
-            ):
+            )
+
+            # Alte Quelle merken, BEVOR pdf_path umgestellt wird
+            old_source = getattr(self, "pdf_path", None)
+
+            # ---------- 1) pdf_path sofort umstellen ----------
+            if new_file_path and os.path.exists(new_file_path):
+                self.pdf_path = new_file_path
+                print(f"DEBUG: pdf_path aktualisiert auf: {new_file_path}")
+
+            if not delete_enabled:
                 return
 
-            src = getattr(self, "pdf_path", None)
-            if not src or not os.path.exists(src):
-                return
+            # ---------- 2) Backup temporär deaktivieren ----------
+            backup_was_active = bool(getattr(self, "create_backup", True))
+            if backup_was_active:
+                _set_backup_state(False)
+                print("[Backup] Temporär deaktiviert wegen Quelldatei-Löschen")
 
-            # Nichts tun, wenn Quelle == Ziel (Overwrite-Fall)
+            # ---------- 3) Quelldatei löschen ----------
             try:
-                if os.path.abspath(src) == os.path.abspath(new_file_path):
-                    return
-            except Exception:
-                return
+                if old_source and os.path.exists(old_source):
+                    try:
+                        same = os.path.abspath(old_source) == os.path.abspath(
+                            new_file_path
+                        )
+                    except Exception:
+                        same = False
 
-            # Sicherheitsnetz: Nur PDF-Dateien löschen
-            if not src.lower().endswith(".pdf"):
-                print(f"WARN: Quelldatei ist keine PDF – nicht gelöscht: {src}")
-                return
-
-            os.remove(src)
-            print(f"DEBUG: Quelldatei gelöscht: {src}")
+                    if same:
+                        # Overwrite-Fall – nichts löschen
+                        pass
+                    elif not old_source.lower().endswith(".pdf"):
+                        print(f"WARN: Quelldatei ist keine PDF: {old_source}")
+                    else:
+                        os.remove(old_source)
+                        print(f"DEBUG: Quelldatei gelöscht: {old_source}")
+            finally:
+                # ---------- 4) Backup-Zustand wiederherstellen ----------
+                if backup_was_active:
+                    _set_backup_state(True)
+                    print("[Backup] Zustand wiederhergestellt")
 
         except Exception as e:
-            print(f"FEHLER beim Löschen der Quelldatei: {e}")
+            print(f"FEHLER beim Finalisieren des Speicherns: {e}")
 
     ### 4. POSITION Für Sprung nach NEULADEN
     def _save_position_for_reload(self, item, final_path, target_page, element_type):
