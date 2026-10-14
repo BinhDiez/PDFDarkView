@@ -372,6 +372,22 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 <details>
 <summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
+
+## Version 2.6.2
+
+### Dateinamen-Verwaltung & Speicherverhalten
+
+### Neu
+
+· Kein Backup wenn Quelldatei nach dem Speichern löschen ausgewählt wurde.
+· Trennzeichen: "" wurde in den Dateinamens-Einstellungen entfernt um die Verwendung von Suffixen immer sicherzustellen.
+
+⚠️ Hinweise für Anwender
+
+· Die Option „Quelldatei nach dem Speichern löschen" ignoriert jetzt die Backup-Einstellung. 
+  So dass es zu keiner Dateivermehrung im Verzeichnis kommt.
+  Bei destruktiven Änderungen werden weiterhin Backups erzeugt, wenn Backup aktiviert ist.
+
 ## Version 2.6.1
 
 ### Dateinamen-Verwaltung & Speicherverhalten
