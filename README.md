@@ -384,9 +384,8 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 
 ⚠️ Hinweise für Anwender
 
-· Die Option „Quelldatei nach dem Speichern löschen" ignoriert jetzt die Backup-Einstellung. 
-  So dass es zu keiner Dateivermehrung im Verzeichnis kommt.
-  Bei destruktiven Änderungen werden weiterhin Backups erzeugt, wenn Backup aktiviert ist.
+- Die Option „Quelldatei nach dem Speichern löschen" ignoriert jetzt die Backup-Einstellung für nicht destruktive Veränderungen (Einfügungen ...), weil dies dem Ziel der Einstellung (keine Dateivermehrung) widersprechen würde.
+- Bei destruktiven Änderungen werden weiterhin Backups erzeugt, wenn Backup aktiviert ist.
 
 ### Verbesserungen
 
