@@ -388,6 +388,11 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
   So dass es zu keiner Dateivermehrung im Verzeichnis kommt.
   Bei destruktiven Änderungen werden weiterhin Backups erzeugt, wenn Backup aktiviert ist.
 
+### Verbesserungen
+
+- Robustere Erkennung der verwendbaren Stimmen für die ergänzende Sprachausgabe (jetzt auch für Windows)
+- Menüleistendesign für Windows verbessert (Mac bereits optimal) 
+
 ## Version 2.6.1
 
 ### Dateinamen-Verwaltung & Speicherverhalten
@@ -792,6 +797,8 @@ xattr -d com.apple.quarantine '/Users/username/Downloads/PDFDarkView.app'
 | `_macOS_arm64` | 🍎 Apple Silicon (M1–M4) |
 | `_macOS_x86_64` | 🍎 Intel Macs |
 | `_windows_x64` | 🪟 Windows 64 Bit |
+
+> Windows on ARM wird derzeit nicht unterstützt / not supported
 
 > Windows on ARM wird derzeit nicht unterstützt / not supported
 
