@@ -789,9 +789,9 @@ xattr -d com.apple.quarantine '/Users/username/Downloads/PDFDarkView.app'
 
 | Suffix | Betriebssystem |
 |--------|-----------------|
-| `_macOS_as` | Apple Silicon (M1–M4) |
-| `_macOS_intel` | Intel Macs |
-| `_win` | Windows x64 |
+| `_macOS_arm64` | 🍎 Apple Silicon (M1–M4) |
+| `_macOS_x86_64` | 🍎 Intel Macs |
+| `_windows_x64` | 🪟 Windows 64 Bit |
 
 > Windows on ARM wird derzeit nicht unterstützt / not supported
 
