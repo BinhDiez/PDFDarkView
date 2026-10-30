@@ -82,7 +82,9 @@ from contextlib import contextmanager
 # Drittanbietermodule
 import fitz  # PyMuPDF
 import pyttsx3
-os.environ.setdefault("QT_API", "pyside6")
+import os
+os.environ["QT_API"] = "pyside6"
+os.environ["FORCE_QT_API"] = "1"
 import qtawesome as qta
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from PyPDF2 import PdfReader, PdfWriter
