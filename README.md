@@ -372,6 +372,13 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 <details>
 <summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
+## Version 3.0.0
+
+### Neu
+
+· PyQt5 --> PySide6
+· Aktualisierung der Begleitdokumente (Lizenztexte) im Repo und im Bundle
+· Impressum mit Verweis auf alle Third Party Licenses
 
 ## Version 2.6.2
 
