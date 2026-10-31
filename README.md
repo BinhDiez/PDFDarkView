@@ -377,6 +377,8 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 ### Neu
 
 · PyQt5 --> PySide6
+· Poppler vollständig entfernt und durch pdfium2 ersetzt
+· PDF Seiten als JPG/PNG exportieren geht jetzt auch unter Windows
 · Aktualisierung der Begleitdokumente (Lizenztexte) im Repo und im Bundle
 · Impressum mit Verweis auf alle Third Party Licenses
 
