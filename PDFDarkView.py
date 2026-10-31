@@ -46,12 +46,15 @@ python PDFDarkView.py
     # Alle Pakete installieren
     pip install PySide6 PyMuPDF PyPDF2 qtawesome pyttsx3 Pillow numpy python-docx pytesseract ocrmypdf pdf2image cryptography opencv-python
 
+    pip install pypdfium2
+
     # Optional: PyInstaller für den Build
     pip install pyinstaller
 
 
     Wichtig: PyQt5 und PyQt6 dürfen nicht in derselben venv installiert sein wie PySide6, sonst kommt es zu Segfaults (wie du bereits erlebt hast). Prüfe mit pip list | grep -i "pyqt\|pyside".
 """
+
 # Standartbibliothek
 import argparse
 import atexit
@@ -85,6 +88,17 @@ import pyttsx3
 import os
 os.environ["QT_API"] = "pyside6"
 os.environ["FORCE_QT_API"] = "1"
+
+# # Debug: Umgebung protokollieren ???
+# try:
+#     with open(os.path.join(os.path.expanduser("~"),"Desktop", "pdftools_debug.txt"), "w") as f:
+#         f.write(f"QT_API={os.environ.get('QT_API')}\n")
+#         f.write(f"FORCE_QT_API={os.environ.get('FORCE_QT_API')}\n")
+#         f.write(f"sys.frozen={getattr(sys, 'frozen', False)}\n")
+#         f.write(f"sys._MEIPASS={getattr(sys, '_MEIPASS', 'n/a')}\n")
+# except Exception:
+#     pass
+
 import qtawesome as qta
 from PIL import Image, ImageDraw, ImageEnhance, ImageFont
 from PyPDF2 import PdfReader, PdfWriter
@@ -236,6 +250,8 @@ APP_VERSION = "3.0.0"
 
     3.0.0
         ✨ Neu
+        · Poppler vollständig entfernt und durch pdfium2 ersetzt
+        · PDF Seiten als JPG/PNG exportieren geht jetzt auch unter Windows
         · PyQt5 --> PySide6
         · Aktualisierung der Begleitdokumente (Lizenztexte) im Repo und im Bundle
         · Impressum mit Verweis auf alle Third Party Licenses
@@ -938,7 +954,6 @@ class Config:
 
             if os.path.exists(tesseract_candidate):
                 cls.TESSERACT_PATH = tesseract_candidate
-                cls.POPPLER_PATH = bundle_bin
                 if platform.system() == "Darwin":
                     if "DYLD_LIBRARY_PATH" in os.environ:
                         os.environ["DYLD_LIBRARY_PATH"] = bundle_lib + ":" + os.environ["DYLD_LIBRARY_PATH"]
@@ -1076,14 +1091,6 @@ class Config:
             except Exception as e:
                 print(f"[TIMING] subprocess Fehler bei ocrmypdf: {e}")
 
-        # Poppler-Pfad setzen (Fallback)
-        if platform.system() == "Darwin":
-            cls.POPPLER_PATH = "/usr/local/bin"
-        elif platform.system() == "Windows":
-            cls.POPPLER_PATH = r"C:\Program Files\poppler-23.08.0\Library\bin"
-        else:
-            cls.POPPLER_PATH = "/usr/bin"
-
         elapsed = time.time() - start_time
         print(f"[TIMING] _find_ocr_tools (System) completed in {elapsed:.3f}s")
         return (tesseract_path, ocrmypdf_path)
@@ -1191,22 +1198,6 @@ class Config:
         cls.OCR_DPI = 300
         cls.OCR_LANGUAGE = "deu+eng+fra+ita+spa+por+nld+swe+fin+dan+nor+rus"
         cls.OCR_CONFIG = "--psm 6 --oem 3 -c preserve_interword_spaces=1"
-
-        # Poppler Pfade
-        if platform.system() == "Darwin":
-            cls.POPPLER_PATHS = [
-                "/opt/homebrew/bin",
-                "/usr/local/bin",
-                "/opt/local/bin",
-                "/usr/bin",
-            ]
-        elif platform.system() == "Windows":
-            cls.POPPLER_PATHS = [
-                r"C:\Program Files\poppler-23.08.0\Library\bin",
-                r"C:\Program Files\poppler\bin",
-            ]
-        else:
-            cls.POPPLER_PATHS = ["/usr/bin", "/usr/local/bin"]
 
         elapsed = time.time() - start_time
         print(f"[TIMING] _initialize_paths abgeschlossen in {elapsed:.3f}s")
@@ -1697,17 +1688,6 @@ class Config:
                 f"Existiert OCRmyPDF: {'YES' if cls.OCRMYPDF_PATH and os.path.exists(cls.OCRMYPDF_PATH) else 'NO'}"
             )
 
-        if getattr(sys, "frozen", False):
-            if hasattr(cls, "POPPLER_PATH") and cls.POPPLER_PATH:
-                print(f"POPPLER_PATH: {cls.POPPLER_PATH} (aus Bundle)")
-            else:
-                print("POPPLER_PATH: nicht gesetzt (Bundle)")
-        else:
-            if hasattr(cls, "POPPLER_PATH") and cls.POPPLER_PATH:
-                print(f"POPPLER_PATH: {cls.POPPLER_PATH}")
-            else:
-                print("POPPLER_PATH: nicht gesetzt")
-
         print(f"OCR_LANGUAGE: {cls.OCR_LANGUAGE}")
         print(f"=== END OCR DEBUG ===\n")
 
@@ -1788,7 +1768,6 @@ class Config:
             except ImportError:
                 print("  OCRmyPDF: ❌ Fehlt (Import fehlgeschlagen)")
 
-            print(f"Poppler: ✅ OK (Bundle: {cls.POPPLER_PATH})")
         else:
             # ===== ENTWICKLUNGSMODUS: subprocess mit Timeout =====
             if cls.TESSERACT_PATH and os.path.exists(cls.TESSERACT_PATH):
@@ -1822,17 +1801,6 @@ class Config:
                     print(f"  ❌ OCRmyPDF --version Fehler: {e}")
             else:
                 print("❌ OCRmyPDF nicht gefunden (Pfad fehlt)")
-
-            # Poppler (Info)
-            poppler_ok = False
-            for path in cls.POPPLER_PATHS:
-                pdfinfo_path = os.path.join(path, "pdfinfo")
-                if os.path.exists(pdfinfo_path):
-                    print(f"Poppler: ✅ OK (gefunden in {path})")
-                    poppler_ok = True
-                    break
-            if not poppler_ok:
-                print(f"Poppler: ⚠️  Nicht im Standard-PATH")
 
         return tesseract_ok and ocrmypdf_ok
 
@@ -12164,7 +12132,7 @@ class OCRThread(QThread):
             self._working_copy = None
             return False
 
-        # Environment vorbereiten (Tesseract, Poppler)
+        # Environment vorbereiten (Tesseract)
         env = self._prepare_environment()
         if verbose_setting == 3:
             env["TESSERACT_DEBUG"] = "1"
@@ -12533,8 +12501,7 @@ class OCRThread(QThread):
         else:
             if Config.TESSERACT_PATH:
                 env["TESSERACT_CMD"] = Config.TESSERACT_PATH
-            if Config.POPPLER_PATH:
-                env["PATH"] = Config.POPPLER_PATH + os.pathsep + env.get("PATH", "")
+
         return env
 
     def cancel(self):
@@ -42701,13 +42668,12 @@ class PDFViewer(QMainWindow):
 
         export_menu.addSeparator()
 
-        if sys.platform == "darwin":
-            export_images_action = QAction(
-                qta.icon("fa5s.images"), self.tr("export_images_menu"), self
-            )
-            export_images_action.setShortcut("Ctrl+Alt+I")
-            export_images_action.triggered.connect(self.export_images)
-            export_menu.addAction(export_images_action)
+        export_images_action = QAction(
+            qta.icon("fa5s.images"), self.tr("export_images_menu"), self
+        )
+        export_images_action.setShortcut("Ctrl+Alt+I")
+        export_images_action.triggered.connect(self.export_images)
+        export_menu.addAction(export_images_action)
 
         extract_images_action = QAction(
             qta.icon("fa5s.image"), self.tr("extract_images_menu"), self
@@ -47821,14 +47787,14 @@ class PDFViewer(QMainWindow):
             subprocess.run(["xdg-open", file_path])
 
     def export_images(self):
-        """Exportiert alle Seiten als PNG/JPEG mit pdf2image."""
+        """Exportiert alle Seiten als PNG/JPEG mit pypdfium2 (kein Poppler nötig)."""
         if not self.pdf_path or not os.path.exists(self.pdf_path):
             self._show_no_pdf_dialog()
             return
 
-        # Prüfen ob pdf2image installiert ist
+        # pypdfium2 importieren (Lazy Import, wie zuvor pdf2image)
         try:
-            import pdf2image
+            import pypdfium2 as pdfium
         except ImportError:
             myUniversalDialog(
                 self,
@@ -47849,6 +47815,7 @@ class PDFViewer(QMainWindow):
         settings = dialog.get_data()
         self.say(self.tr("export_images_start"))
 
+        doc = None
         try:
             # Zielordner erstellen
             target_folder = settings["target_folder"]
@@ -47875,36 +47842,25 @@ class PDFViewer(QMainWindow):
                 }
             """)
 
-            # pdf2image Konvertierung
-            from pdf2image import convert_from_path
+            # PDF öffnen
+            doc = pdfium.PdfDocument(self.pdf_path)
 
-            # Poppler-Pfad für Windows setzen
-            poppler_path = None
-            if sys.platform == "win32":
-                # Versuche Poppler im Script-Verzeichnis zu finden
-                poppler_path = os.path.join(Config.SCRIPT_DIR, "poppler", "bin")
-                if not os.path.exists(poppler_path):
-                    poppler_path = None
-
-            # Seiten konvertieren
             first_page = settings["start_page"]
             last_page = settings["end_page"]
 
+            # PDFium-Seiten sind 0-basiert: Seite 1 = Index 0
+            page_indices = list(range(first_page - 1, last_page))
+
+            # DPI in PDFium-Scale umrechnen (72 DPI = Scale 1.0)
+            scale = settings["dpi"] / 72.0
+
             print(
-                f"Konvertiere Seiten {first_page} bis {last_page} mit {settings['dpi']} DPI"
+                f"Konvertiere Seiten {first_page} bis {last_page} mit {settings['dpi']} DPI "
+                f"(pypdfium2, scale={scale:.3f})"
             )
 
-            images = convert_from_path(
-                self.pdf_path,
-                dpi=settings["dpi"],
-                first_page=first_page,
-                last_page=last_page,
-                poppler_path=poppler_path,
-                fmt=settings["format"],
-            )
-
-            # Bilder speichern
-            for i, image in enumerate(images):
+            # Seiten einzeln rendern
+            for i, page_index in enumerate(page_indices):
                 if progress_dialog.wasCanceled():
                     self.say(self.tr("export_images_cancel"))
                     return
@@ -47914,9 +47870,13 @@ class PDFViewer(QMainWindow):
                     self.tr("export_images_saving", page_num, total_pages)
                 )
 
-                # Dateinamen generieren
+                # Seite holen und rendern
+                page = doc[page_index]
+                bitmap = page.render(scale=scale)
+                image = bitmap.to_pil()
+
+                # Dateinamen generieren (Logik unverändert)
                 if settings["single_files"]:
-                    # Mit führenden Nullen für sortierte Reihenfolge
                     digits = len(str(total_pages))
                     filename = (
                         f"seite_{str(page_num).zfill(digits)}.{settings['format_name']}"
@@ -47932,7 +47892,7 @@ class PDFViewer(QMainWindow):
                     filename = f"{base}_{page_num}{ext}"
                     filepath = os.path.join(target_folder, filename)
 
-                # Qualität für JPEG setzen
+                # Speichern – Qualität für JPEG setzen
                 if settings["format"] == "jpeg":
                     image.save(filepath, "JPEG", quality=settings["quality"])
                 else:
@@ -47943,12 +47903,11 @@ class PDFViewer(QMainWindow):
 
             progress_dialog.close()
 
-            # Erfolgsmeldung
+            # Erfolgsmeldung (unverändert)
             success_message = self.tr(
                 "export_images_success", total_pages, target_folder
             )
 
-            # Hier verwenden wir myUniversalDialog für die Erfolgsmeldung
             result_dialog = myUniversalDialog(
                 self,
                 title=self.tr("success"),
@@ -47986,6 +47945,9 @@ class PDFViewer(QMainWindow):
             ).exec()
             print(f"Fehler beim Exportieren der Bilder: {e}")
             traceback.print_exc()
+        finally:
+            if doc is not None:
+                doc.close()
 
     ###==============================================
     ### ALLE BILDER EXPTRAHIEREN

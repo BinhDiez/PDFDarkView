@@ -2852,7 +2852,7 @@ Mẹo: Bạn có thể điều chỉnh cài đặt trong menu ngữ cảnh.
         'export_images_open_folder': '📁 Mở thư mục',
         'export_images_cancel': 'Đã hủy xuất hình ảnh',
         'export_images_error_format': 'Lỗi khi xuất hình ảnh: {0}',
-        'export_images_pdf2image_missing': 'Thư viện "pdf2image" chưa được cài đặt.\n\nVui lòng cài đặt với:\npip install pdf2image\n\nĐối với Windows, bạn cũng cần Poppler:\nhttps://github.com/oschwartz10612/poppler-windows/releases/',
+        'export_images_pdf2image_missing': 'Thư viện "pypdfium2" chưa được cài đặt.\n\nVui lòng cài đặt với:\npip install pypdfium2\n\nĐối với Windows, bạn cũng cần Poppler:\nhttps://github.com/oschwartz10612/poppler-windows/releases/',
 
         # ============================================
         # 94. PDF/A KONVERTIERUNG

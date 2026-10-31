@@ -78,9 +78,13 @@ Full license text: see `licenses/MPL-2.0.txt`.
 explicitly included.)
 Full license text: see `licenses/Apache-2.0.txt`.
 
-## Poppler — GPL-2.0 / GPL-3.0
+## pypdfium2 — Apache-2.0 OR BSD-3-Clause
 
-(External binary; not bundled by this project's PyInstaller build unless
-explicitly included.)
-Full license text: see `licenses/AGPL-3.0.txt` (the GPL text is incorporated
-by reference in the AGPL) or https://www.gnu.org/licenses/gpl-3.0.txt.
+pypdfium2 is a Python binding to PDFium, the PDF engine used by Chrome.
+It is dual-licensed under the Apache License 2.0 or the BSD 3-Clause
+License. It is bundled with this application's distributed binaries
+(macOS .app, Windows .exe) and is used for PDF-to-image conversion.
+
+Full license text: see `licenses/Apache-2.0.txt` or
+`licenses/BSD-3-Clause.txt` in the bundle.
+Official source: https://github.com/pypdfium2-team/pypdfium2

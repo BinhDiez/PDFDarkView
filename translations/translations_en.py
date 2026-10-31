@@ -2854,7 +2854,7 @@ Tip: You can adjust settings in the context menu.
         'export_images_open_folder': '📁 Open folder',
         'export_images_cancel': 'Image export cancelled',
         'export_images_error_format': 'Error exporting images: {0}',
-        'export_images_pdf2image_missing': 'The library "pdf2image" is not installed.\n\nPlease install it with:\npip install pdf2image\n\nFor Windows you also need Poppler:\nhttps://github.com/oschwartz10612/poppler-windows/releases/',
+        'export_images_pdf2image_missing': 'The library "pypdfium2" is not installed.\n\nPlease install it with:\npip install pypdfium2\n\nFor Windows you also need Poppler:\nhttps://github.com/oschwartz10612/poppler-windows/releases/',
 
         # ============================================
         # 94. PDF/A KONVERTIERUNG
