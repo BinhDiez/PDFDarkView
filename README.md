@@ -372,6 +372,11 @@ It combines PDF viewing, editing, OCR text recognition, document conversion, acc
 <details>
 <summary>🔄 Versionsverlauf / Change Log / Lịch sử phiên bản</summary>
 
+## 3.1.0
+
+## Neu
+- Smartes Setzen der für Unterschriften optimierten QSettings bei Erstbenutzung und bei Versionswechsel (die Einstellungen können manuell im Dateinamensdialog angepasst werden)
+
 ## Version 3.0.0
 
 ### Neu
